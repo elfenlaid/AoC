@@ -1,0 +1,55 @@
+# Advent of Code - Day 01
+
+## Part Two
+
+```elixir
+puzzle_input = File.read!("Code/temp/aoc/2022/elixir/puzzle_input01.txt")
+```
+
+```elixir
+input = """
+1000
+2000
+3000
+
+4000
+
+5000
+6000
+
+7000
+8000
+9000
+
+10000
+"""
+```
+
+```elixir
+ratio = fn ratio ->
+  ratio
+  |> String.split()
+  |> Enum.map(&Integer.parse/1)
+  |> Enum.map(&elem(&1, 0))
+  |> Enum.sum()
+  |> dbg()
+end
+
+solution = fn input ->
+  input
+  |> String.split("\n\n")
+  |> Enum.map(&ratio.(&1))
+  |> Enum.sort(:desc)
+  |> Enum.take(3)
+  |> Enum.sum()
+  |> dbg()
+end
+```
+
+```elixir
+solution.(input)
+```
+
+```elixir
+solution.(puzzle_input)
+```

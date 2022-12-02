@@ -1,0 +1,181 @@
+# Day 02
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.7.0"}
+])
+```
+
+## Section
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+A Y
+B X
+C Z
+"""
+```
+
+```elixir
+defmodule Game do
+  def parse_shape(str) do
+    #  A for Rock, B for Paper, and C for Scissors
+    #  X for Rock, Y for Paper, and Z for Scissors.
+    cond do
+      str in ["A", "X"] -> :rock
+      str in ["B", "Y"] -> :paper
+      str in ["C", "Z"] -> :scissors
+      :else -> raise "unknown move"
+    end
+  end
+
+  def parse_outcome(str) do
+    # X means you need to lose
+    # Y means you need to end the round in a draw
+    # and Z means you need to win
+    case str do
+      "X" -> :defeat
+      "Y" -> :draw
+      "Z" -> :victory
+    end
+  end
+
+  def my_shape_for_outcome(shape, outcome) do
+    case {shape, outcome} do
+      {_, :draw} -> shape
+      {:rock, :victory} -> :paper
+      {:rock, :defeat} -> :scissors
+      {:scissors, :victory} -> :rock
+      {:scissors, :defeat} -> :paper
+      {:paper, :victory} -> :scissors
+      {:paper, :defeat} -> :rock
+    end
+  end
+
+  def outcome(your_shape, opponent_shape) do
+    # Rock defeats Scissors, Scissors defeats Paper, and Paper defeats Rock.
+    case {your_shape, opponent_shape} do
+      {:rock, :scissors} -> :victory
+      {:scissors, :paper} -> :victory
+      {:paper, :rock} -> :victory
+      {same, same} -> :draw
+      _ -> :defeat
+    end
+  end
+
+  def outcome_score(outcome) do
+    # outcome of the round 
+    # (0 if you lost, 3 if the round was a draw, and 6 if you won)
+    case outcome do
+      :defeat -> 0
+      :draw -> 3
+      :victory -> 6
+    end
+  end
+
+  def shape_score(shape) do
+    # score for the shape you selected 
+    # (1 for Rock, 2 for Paper, and 3 for Scissors)
+    case shape do
+      :rock -> 1
+      :paper -> 2
+      :scissors -> 3
+    end
+  end
+
+  def round_score(your_shape, opponent_shape) do
+    outcome = outcome(your_shape, opponent_shape)
+    shape_score(your_shape) + outcome_score(outcome)
+  end
+end
+```
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule GameTests do
+  use ExUnit.Case, async: true
+  import Game
+
+  test "rock game" do
+    assert outcome(:rock, :scissors) == :victory
+    assert outcome(:rock, :rock) == :draw
+    assert outcome(:rock, :paper) == :defeat
+  end
+
+  test "scissor game" do
+    assert outcome(:scissors, :paper) == :victory
+    assert outcome(:scissors, :scissors) == :draw
+    assert outcome(:scissors, :rock) == :defeat
+  end
+
+  test "paper game" do
+    assert outcome(:paper, :rock) == :victory
+    assert outcome(:paper, :paper) == :draw
+    assert outcome(:paper, :scissors) == :defeat
+  end
+
+  test "round score" do
+    assert round_score(:paper, :rock) == 8
+    assert round_score(:rock, :paper) == 1
+    assert round_score(:scissors, :scissors) == 6
+  end
+
+  test "derive my shape for outcome" do
+    assert my_shape_for_outcome(:rock, :draw) == :rock
+    assert my_shape_for_outcome(:paper, :defeat) == :rock
+    assert my_shape_for_outcome(:scissors, :victory) == :rock
+  end
+end
+
+ExUnit.run()
+```
+
+```elixir
+rounds =
+  puzzle_input
+  |> String.split("\n", trim: true)
+  |> Stream.map(&String.split(&1, " "))
+```
+
+```elixir
+# Part One
+
+rounds
+|> Stream.map(fn [opponent, me] ->
+  Game.round_score(
+    Game.parse_shape(me),
+    Game.parse_shape(opponent)
+  )
+end)
+|> Enum.sum()
+```
+
+```elixir
+# Part Two
+
+rounds
+|> Stream.map(fn [opponent, outcome] ->
+  opponent_shape = Game.parse_shape(opponent)
+
+  my_shape =
+    Game.my_shape_for_outcome(
+      opponent_shape,
+      Game.parse_outcome(outcome)
+    )
+
+  Game.round_score(
+    my_shape,
+    opponent_shape
+  )
+end)
+|> Enum.sum()
+```
