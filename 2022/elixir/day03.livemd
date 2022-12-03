@@ -125,7 +125,7 @@ ExUnit.run()
 rucksacks =
   puzzle_input
   |> String.split("\n", trim: true)
-  |> Enum.map(&Items.parse_rucksack/1)
+  |> Stream.map(&Items.parse_rucksack/1)
 ```
 
 <!-- livebook:{"branch_parent_index":1} -->
