@@ -1,0 +1,160 @@
+# Day 03
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.7.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+vJrwpWtwJgWrhcsFMMfFFhFp
+jqHRNqRjqzjGDLGLrsFMfFZSrLrFZsSL
+PmmdzqPrVvPwwTWBwg
+wMqvLMZHhHMvwLHjbvcjnnSBnvTQFn
+ttgJtRGJQctTZtZT
+CrZsJsPPZsGzwwsLwLmpwMDw
+"""
+```
+
+## Common
+
+```elixir
+defmodule Items do
+  def parse_rucksack(str), do: String.codepoints(str)
+
+  def parse_compartments(rucksack) do
+    count = round(length(rucksack) / 2)
+    Enum.split(rucksack, count)
+  end
+
+  def common_compartments_item({left, right}) do
+    [item] =
+      MapSet.intersection(
+        MapSet.new(left),
+        MapSet.new(right)
+      )
+      |> MapSet.to_list()
+
+    item
+  end
+
+  @scores Map.merge(
+            ?a..?z |> Stream.map(&to_string([&1])) |> Stream.zip(1..26) |> Map.new(),
+            ?A..?Z |> Stream.map(&to_string([&1])) |> Stream.zip(27..52) |> Map.new()
+          )
+
+  def item_priority(item) do
+    Map.get(@scores, item, 0)
+  end
+
+  def group_token(rs) do
+    [token] =
+      rs
+      |> Stream.map(&MapSet.new/1)
+      |> Enum.reduce(&MapSet.intersection(&1, &2))
+      |> MapSet.to_list()
+
+    token
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(auto_run: false)
+
+defmodule ItemsTests do
+  use ExUnit.Case, async: true
+  import Items
+
+  test "rucksack parsing" do
+    assert parse_rucksack("vJrwpWtwJgWrhcsFMMfFFhFp") ==
+             ~w(v J r w p W t w J g W r h c s F M M f F F h F p)
+  end
+
+  test "compartments parsing" do
+    rucksack = ~w(v J r w p W t w J g W r h c s F M M f F F h F p)
+
+    assert parse_compartments(rucksack) == {
+             ~w(v J r w p W t w J g W r),
+             ~w(h c s F M M f F F h F p)
+           }
+  end
+
+  test "common compartments item" do
+    compartments = {~w(v J r w p W t w J g W r), ~w(h c s F M M f F F h F p)}
+    assert common_compartments_item(compartments) == "p"
+  end
+
+  test "item priority" do
+    assert item_priority("p") == 16
+    assert item_priority("L") == 38
+  end
+
+  test "group token" do
+    group = [
+      ~w(v J r w p W t w J g W r h c s F M M f F F h F p),
+      ~w(j q H R N q R j q z j G D L G L r s F M f F Z S r L r F Z s S L),
+      ~w(P m m d z q P r V v P w w T W B w g)
+    ]
+
+    assert group_token(group) == "r"
+  end
+end
+
+ExUnit.run()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+rucksacks =
+  puzzle_input
+  |> String.split("\n", trim: true)
+  |> Enum.map(&Items.parse_rucksack/1)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+compartments = Enum.map(rucksacks, &Items.parse_compartments/1)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+compartments
+|> Stream.map(&Items.common_compartments_item/1)
+|> Stream.map(&Items.item_priority/1)
+|> Enum.sum()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+rucksacks
+|> Stream.chunk_every(3)
+|> Stream.map(&Items.group_token/1)
+|> Stream.map(&Items.item_priority/1)
+|> Enum.sum()
+```
