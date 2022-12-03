@@ -12,6 +12,8 @@ Mix.install([
 area = Kino.Input.textarea("Puzzle Input")
 ```
 
+<!-- livebook:{"reevaluate_automatically":true} -->
+
 ```elixir
 puzzle_input = Kino.Input.read(area)
 ```
@@ -126,12 +128,6 @@ rucksacks =
   |> Enum.map(&Items.parse_rucksack/1)
 ```
 
-<!-- livebook:{"reevaluate_automatically":true} -->
-
-```elixir
-compartments = Enum.map(rucksacks, &Items.parse_compartments/1)
-```
-
 <!-- livebook:{"branch_parent_index":1} -->
 
 ## Part One
@@ -139,10 +135,22 @@ compartments = Enum.map(rucksacks, &Items.parse_compartments/1)
 <!-- livebook:{"reevaluate_automatically":true} -->
 
 ```elixir
-compartments
+rucksacks
+|> Stream.map(&Items.parse_compartments/1)
 |> Stream.map(&Items.common_compartments_item/1)
 |> Stream.map(&Items.item_priority/1)
 |> Enum.sum()
+```
+
+```elixir
+rucksacks
+|> Task.async_stream(fn rucksack ->
+  rucksack
+  |> Items.parse_compartments()
+  |> Items.common_compartments_item()
+  |> Items.item_priority()
+end)
+|> Enum.reduce(0, fn {:ok, priority}, acc -> priority + acc end)
 ```
 
 <!-- livebook:{"branch_parent_index":1} -->
@@ -157,4 +165,15 @@ rucksacks
 |> Stream.map(&Items.group_token/1)
 |> Stream.map(&Items.item_priority/1)
 |> Enum.sum()
+```
+
+```elixir
+rucksacks
+|> Stream.chunk_every(3)
+|> Task.async_stream(fn group ->
+  group
+  |> Items.group_token()
+  |> Items.item_priority()
+end)
+|> Enum.reduce(0, fn {:ok, priority}, acc -> priority + acc end)
 ```
