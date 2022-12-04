@@ -1,0 +1,101 @@
+# Day 04
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.7.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+2-4,6-8
+2-3,4-5
+5-7,7-9
+2-8,3-7
+6-6,4-6
+2-6,4-8
+"""
+```
+
+## Common
+
+```elixir
+pairs =
+  puzzle_input
+  |> String.split(["-", ",", "\n"], trim: true)
+  |> Stream.map(fn str -> str |> Integer.parse() |> elem(0) end)
+  |> Stream.chunk_every(2)
+  |> Stream.map(&List.to_tuple/1)
+  |> Stream.chunk_every(2)
+  |> Stream.map(&List.to_tuple/1)
+```
+
+```elixir
+defmodule Logistics do
+  def superset?({lhsStart, lhsEnd}, {rhsStart, rhsEnd}) do
+    lhsStart <= rhsStart && lhsEnd >= rhsEnd
+  end
+
+  def overlap?({lhsStart, lhsEnd}, {rhsStart, _}) do
+    lhsStart <= rhsStart && lhsEnd >= rhsStart
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule LogisticsTests do
+  use ExUnit.Case, async: true
+
+  test "superset" do
+    assert Logistics.superset?({2, 8}, {3, 7})
+    refute Logistics.superset?({2, 6}, {4, 8})
+  end
+
+  test "overlap" do
+    assert Logistics.overlap?({5, 7}, {7, 9})
+    refute Logistics.overlap?({2, 4}, {6, 8})
+  end
+end
+
+ExUnit.run()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+```elixir
+pairs
+|> Stream.filter(fn {lhs, rhs} ->
+  Logistics.superset?(lhs, rhs) || Logistics.superset?(rhs, lhs)
+end)
+|> Enum.count()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+pairs
+|> Stream.filter(fn {lhs, rhs} ->
+  Logistics.overlap?(lhs, rhs) || Logistics.overlap?(rhs, lhs)
+end)
+|> Enum.count()
+```
