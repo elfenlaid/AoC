@@ -1,0 +1,300 @@
+# Day 05
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.7.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+    [D]    
+[N] [C]    
+[Z] [M] [P]
+ 1   2   3 
+
+move 1 from 2 to 1
+move 3 from 1 to 3
+move 2 from 2 to 1
+move 1 from 1 to 2
+"""
+```
+
+## Common
+
+```elixir
+defmodule Move do
+  defstruct [:count, :from, :to]
+
+  def parse(str) do
+    [count, from, to] =
+      Regex.run(~r/move (\d+) from (\d+) to (\d+)/, str)
+      |> tl()
+      |> Enum.map(fn s -> s |> Integer.parse() |> elem(0) end)
+
+    %Move{count: count, from: from - 1, to: to - 1}
+  end
+
+  def print(move) do
+    "move #{inspect(move.count)} from #{inspect(move.from)} to #{inspect(move.to)}"
+  end
+end
+```
+
+```elixir
+defmodule Stack do
+  defstruct [:crates]
+
+  def drop(stack, n_crates), do: %{stack | crates: Enum.drop(stack.crates, n_crates)}
+
+  def store(stack, crates), do: %{stack | crates: crates ++ stack.crates}
+
+  def peek(stack, n_crates), do: Enum.take(stack.crates, n_crates)
+
+  def parse(values) do
+    {crates, _} =
+      values
+      |> Enum.drop_while(&(&1 == " "))
+      |> Enum.split_with(&(Integer.parse(&1) == :error))
+
+    %Stack{crates: crates}
+  end
+end
+```
+
+```elixir
+defmodule Crane do
+  def rearrange(cargo, move, opts \\ []) do
+    from_stack = elem(cargo.stacks, move.from)
+    to_stack = elem(cargo.stacks, move.to)
+
+    crates =
+      case Keyword.get(opts, :by, :one) do
+        :one -> from_stack |> Stack.peek(move.count) |> Enum.reverse()
+        :many -> Stack.peek(from_stack, move.count)
+      end
+
+    %{
+      cargo
+      | stacks:
+          cargo.stacks
+          |> put_elem(
+            move.from,
+            Stack.drop(from_stack, move.count)
+          )
+          |> put_elem(
+            move.to,
+            Stack.store(to_stack, crates)
+          )
+    }
+  end
+end
+```
+
+```elixir
+defmodule Cargo do
+  defstruct [:stacks]
+
+  def new(stacks) do
+    %Cargo{stacks: List.to_tuple(stacks)}
+  end
+
+  def print(cargo) do
+    stacks = Tuple.to_list(cargo.stacks)
+
+    max_len = stacks |> Stream.map(&length(&1.crates)) |> Enum.max()
+
+    stacks
+    |> Stream.with_index(1)
+    |> Stream.map(fn {stack, index} ->
+      Stream.concat([
+        [" #{index} "],
+        stack.crates |> Enum.reverse() |> Stream.map(&"[#{&1}]"),
+        Stream.duplicate("   ", max_len - length(stack.crates))
+      ])
+    end)
+    |> Stream.zip_with(& &1)
+    |> Enum.reverse()
+    |> Enum.intersperse("\n")
+    |> :erlang.iolist_to_binary()
+  end
+
+  def puts(cargo) do
+    cargo |> print() |> IO.puts()
+  end
+end
+```
+
+```elixir
+[crates, instructions] = String.split(puzzle_input, "\n\n", parts: 2)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+stacks =
+  crates
+  |> String.split("\n")
+  |> Stream.map(fn line ->
+    Regex.scan(~r/.(?<value>.).\s?/, line, capture: [:value]) |> List.flatten()
+  end)
+  |> Stream.zip()
+  |> Enum.map(fn stack ->
+    stack |> Tuple.to_list() |> Stack.parse()
+  end)
+
+cargo = Cargo.new(stacks)
+
+cargo |> Cargo.print() |> IO.puts()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+moves =
+  instructions
+  |> String.split("\n", trim: true)
+  |> Enum.map(&Move.parse/1)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule Tests do
+  use ExUnit.Case, async: true
+
+  test "parse stack" do
+    assert Stack.parse([" ", "N", "Z", "1"]) == %Stack{
+             crates: ~w(N Z)
+           }
+  end
+
+  test "parse move" do
+    assert Move.parse("move 1 from 2 to 1") == %Move{
+             count: 1,
+             from: 1,
+             to: 0
+           }
+  end
+
+  test "store crates" do
+    assert Stack.store(%Stack{crates: ~w(P)}, ~w(N Z)) == %Stack{
+             crates: ~w(N Z P)
+           }
+  end
+
+  test "drop crates" do
+    assert Stack.drop(%Stack{crates: ~w(N Z)}, 1) == %Stack{
+             crates: ~w(Z)
+           }
+  end
+
+  test "peek crates" do
+    assert Stack.peek(%Stack{crates: ~w(N Z)}, 2) == ~w(N Z)
+  end
+
+  test "crane rearrange by one" do
+    cargo = %Cargo{
+      stacks: {
+        %Stack{crates: ~w(D N Z)},
+        %Stack{crates: ~w(C M)},
+        %Stack{crates: ~w(P)}
+      }
+    }
+
+    assert Crane.rearrange(cargo, %Move{count: 3, from: 0, to: 2}) == %Cargo{
+             stacks: {
+               %Stack{crates: ~w()},
+               %Stack{crates: ~w(C M)},
+               %Stack{crates: ~w(Z N D P)}
+             }
+           }
+  end
+
+  test "crane rearrange by many" do
+    cargo = %Cargo{
+      stacks: {
+        %Stack{crates: ~w(D N Z)},
+        %Stack{crates: ~w(C M)},
+        %Stack{crates: ~w(P)}
+      }
+    }
+
+    assert Crane.rearrange(cargo, %Move{count: 3, from: 0, to: 2}, by: :many) == %Cargo{
+             stacks: {
+               %Stack{crates: ~w()},
+               %Stack{crates: ~w(C M)},
+               %Stack{crates: ~w(D N Z P)}
+             }
+           }
+  end
+end
+
+ExUnit.run()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+```elixir
+{steps, result} =
+  Enum.map_reduce(moves, cargo, fn move, cargo ->
+    new_cargo = Crane.rearrange(cargo, move)
+    {cargo, new_cargo}
+  end)
+
+Enum.zip(steps, moves)
+|> Enum.each(fn {cargo, move} ->
+  IO.puts([Cargo.print(cargo), "\n\n", Move.print(move), "\n"])
+end)
+
+result |> Cargo.print() |> IO.puts()
+```
+
+```elixir
+result.stacks
+|> Tuple.to_list()
+|> Enum.map(&Stack.peek(&1, 1))
+|> :erlang.iolist_to_binary()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+{steps, result} =
+  Enum.map_reduce(moves, cargo, fn move, cargo ->
+    new_cargo = Crane.rearrange(cargo, move, by: :many)
+    {cargo, new_cargo}
+  end)
+
+Enum.zip(steps, moves)
+|> Enum.each(fn {cargo, move} ->
+  IO.puts([Cargo.print(cargo), "\n\n", Move.print(move), "\n"])
+end)
+
+result |> Cargo.print() |> IO.puts()
+```
+
+```elixir
+result.stacks
+|> Tuple.to_list()
+|> Enum.map(&Stack.peek(&1, 1))
+|> :erlang.iolist_to_binary()
+```
