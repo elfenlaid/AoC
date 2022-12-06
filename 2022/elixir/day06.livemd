@@ -1,0 +1,96 @@
+# Day 06
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.7.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = "mjqjpqmgbljsphdztnvjfqwrcgsmlb"
+```
+
+## Common
+
+```elixir
+defmodule Navigation do
+  @start_of_packet 4
+  @start_of_message 14
+
+  def find_packet_marker(str) do
+    start_of_data(str, @start_of_packet)
+  end
+
+  def find_message_marker(str) do
+    start_of_data(str, @start_of_message)
+  end
+
+  defp start_of_data(str, len) do
+    str
+    |> String.codepoints()
+    |> Stream.chunk_every(len, 1, :discard)
+    |> Stream.with_index(len)
+    |> Enum.find(fn {vs, _} -> marker?(vs, len) end)
+    |> elem(1)
+  end
+
+  defp marker?(vs, len) do
+    vs |> MapSet.new() |> MapSet.size() == len
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule NavigationTests do
+  use ExUnit.Case, async: true
+
+  test "start of packet" do
+    assert Navigation.find_packet_marker("bvwbjplbgvbhsrlpgdmjqwftvncz") == 5
+    assert Navigation.find_packet_marker("nppdvjthqldpwncqszvftbrmjlhg") == 6
+    assert Navigation.find_packet_marker("nznrnfrfntjfmvfwmzdfjlvtqnbhcprsg") == 10
+    assert Navigation.find_packet_marker("zcfzfwzzqfrljwzlrfnpqdbhtmscgvjw") == 11
+  end
+
+  test "start of message" do
+    assert Navigation.find_message_marker("mjqjpqmgbljsphdztnvjfqwrcgsmlb") == 19
+    assert Navigation.find_message_marker("bvwbjplbgvbhsrlpgdmjqwftvncz") == 23
+    assert Navigation.find_message_marker("nppdvjthqldpwncqszvftbrmjlhg") == 23
+    assert Navigation.find_message_marker("nznrnfrfntjfmvfwmzdfjlvtqnbhcprsg") == 29
+    assert Navigation.find_message_marker("zcfzfwzzqfrljwzlrfnpqdbhtmscgvjw") == 26
+  end
+end
+
+ExUnit.run()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+```elixir
+Navigation.find_packet_marker(puzzle_input)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+Navigation.find_message_marker(puzzle_input)
+```
