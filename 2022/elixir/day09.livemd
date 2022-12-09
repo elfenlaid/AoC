@@ -1,0 +1,279 @@
+# Day 09
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+R 5
+U 8
+L 8
+D 3
+R 17
+D 10
+L 25
+U 20
+"""
+```
+
+## Common
+
+```elixir
+1..1 |> Enum.to_list()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+defmodule Physics do
+  defstruct tails: [{0, 0}], head: {0, 0}
+
+  @touch_distance 1
+
+  def new(tails \\ 1),
+    do: %Physics{
+      tails: Enum.map(1..tails, fn _ -> {0, 0} end)
+    }
+
+  def move(ps, move) do
+    ps
+    |> move_head(move)
+    |> move_tails()
+  end
+
+  def move_head(%Physics{} = ps, move) do
+    %{ps | head: move_point(ps.head, move)}
+  end
+
+  def move_tails(%Physics{} = ps) do
+    tails = Enum.scan(ps.tails, ps.head, &move_tail(&2, &1))
+    %{ps | tails: tails}
+  end
+
+  def move_tail(head, tail) do
+    if touches?(tail, head) do
+      tail
+    else
+      move_point(tail, {direction(head, tail), 1})
+    end
+  end
+
+  def move_point({x, y} = point, {direction, distance}) do
+    case direction do
+      :up ->
+        {x, y + distance}
+
+      :down ->
+        {x, y - distance}
+
+      :left ->
+        {x - distance, y}
+
+      :right ->
+        {x + distance, y}
+
+      :up_left ->
+        point
+        |> move_point({:up, distance})
+        |> move_point({:left, distance})
+
+      :up_right ->
+        point
+        |> move_point({:up, distance})
+        |> move_point({:right, distance})
+
+      :down_left ->
+        point
+        |> move_point({:down, distance})
+        |> move_point({:left, distance})
+
+      :down_right ->
+        point
+        |> move_point({:down, distance})
+        |> move_point({:right, distance})
+    end
+  end
+
+  def direction({headX, headY} = head, {tailX, tailY} = tail) do
+    cond do
+      head == tail ->
+        :same
+
+      headY == tailY ->
+        if headX > tailX, do: :right, else: :left
+
+      headX == tailX ->
+        if headY > tailY, do: :up, else: :down
+
+      headX > tailX ->
+        if headY > tailY, do: :up_right, else: :down_right
+
+      headX < tailX ->
+        if headY > tailY, do: :up_left, else: :down_left
+    end
+  end
+
+  def touches?({headX, headY}, {tailX, tailY}) do
+    abs(headX - tailX) <= @touch_distance && abs(headY - tailY) <= @touch_distance
+  end
+
+  def head(%Physics{} = ps) do
+    ps.head
+  end
+
+  def tails(%Physics{} = ps) do
+    ps.tails
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule PhysicsTests do
+  use ExUnit.Case, async: true
+
+  test "physics moves head" do
+    ps = Physics.new()
+
+    assert ps |> Physics.move({:up, 2}) |> Physics.head() == {0, 2}
+    assert ps |> Physics.move({:down, 2}) |> Physics.head() == {0, -2}
+    assert ps |> Physics.move({:left, 2}) |> Physics.head() == {-2, 0}
+    assert ps |> Physics.move({:right, 2}) |> Physics.head() == {2, 0}
+  end
+
+  test "tail stays if touches head vertically" do
+    ps = Physics.new()
+
+    assert ps |> Physics.move({:up, 1}) |> Physics.tails() == [{0, 0}]
+    assert ps |> Physics.move({:down, 1}) |> Physics.tails() == [{0, 0}]
+  end
+
+  test "tail stays if touches head horizontally" do
+    ps = Physics.new()
+
+    assert ps |> Physics.move({:right, 1}) |> Physics.tails() == [{0, 0}]
+    assert ps |> Physics.move({:left, 1}) |> Physics.tails() == [{0, 0}]
+  end
+
+  test "tail stays if touches head diagonally" do
+    ps = Physics.new()
+
+    assert ps |> Physics.move({:right, 1}) |> Physics.move({:up, 1}) |> Physics.tails() == [
+             {0, 0}
+           ]
+
+    assert ps |> Physics.move({:left, 1}) |> Physics.move({:up, 1}) |> Physics.tails() == [{0, 0}]
+
+    assert ps |> Physics.move({:right, 1}) |> Physics.move({:down, 1}) |> Physics.tails() == [
+             {0, 0}
+           ]
+
+    assert ps |> Physics.move({:left, 1}) |> Physics.move({:down, 1}) |> Physics.tails() == [
+             {0, 0}
+           ]
+  end
+
+  test "tail catches head horizontally" do
+    ps = Physics.new()
+
+    assert ps |> Physics.move({:right, 2}) |> Physics.tails() == [{1, 0}]
+    assert ps |> Physics.move({:left, 2}) |> Physics.tails() == [{-1, 0}]
+  end
+
+  test "tail catches head vertically" do
+    ps = Physics.new()
+
+    assert ps |> Physics.move({:up, 2}) |> Physics.tails() == [{0, 1}]
+    assert ps |> Physics.move({:down, 2}) |> Physics.tails() == [{0, -1}]
+  end
+
+  test "tail catches head diagonally" do
+    ps = Physics.new()
+
+    assert ps |> Physics.move({:right, 1}) |> Physics.move({:up, 2}) |> Physics.tails() == [
+             {1, 1}
+           ]
+
+    assert ps |> Physics.move({:up, 1}) |> Physics.move({:right, 2}) |> Physics.tails() == [
+             {1, 1}
+           ]
+  end
+end
+
+ExUnit.run()
+```
+
+```elixir
+moves =
+  puzzle_input
+  |> String.split("\n", trim: true)
+  |> Stream.map(fn line ->
+    [direction, distance] = String.split(line, " ", parts: 2)
+
+    formatted_direction =
+      case direction do
+        "R" -> :right
+        "U" -> :up
+        "L" -> :left
+        "D" -> :down
+      end
+
+    formatted_distance = distance |> Integer.parse() |> elem(0)
+
+    {formatted_direction, formatted_distance}
+  end)
+```
+
+```elixir
+step_moves =
+  moves
+  |> Stream.flat_map(fn {direction, distance} ->
+    [{direction, 1}] |> Stream.cycle() |> Stream.take(distance)
+  end)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+step_moves
+|> Stream.scan(Physics.new(), &Physics.move(&2, &1))
+|> Enum.flat_map(&Physics.tails/1)
+|> MapSet.new()
+|> MapSet.size()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+step_moves
+|> Stream.scan(Physics.new(9), &Physics.move(&2, &1))
+|> Stream.map(fn ps -> ps |> Physics.tails() |> List.last() end)
+|> MapSet.new()
+|> MapSet.size()
+```
