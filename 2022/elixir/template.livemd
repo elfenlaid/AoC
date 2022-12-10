@@ -1,8 +1,8 @@
-# Day 04
+# Day XX
 
 ```elixir
 Mix.install([
-  {:kino, "~> 0.7.0"}
+  {:kino, "~> 0.8.0"}
 ])
 ```
 
