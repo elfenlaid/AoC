@@ -1,0 +1,365 @@
+# Day 10
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+addx 15
+addx -11
+addx 6
+addx -3
+addx 5
+addx -1
+addx -8
+addx 13
+addx 4
+noop
+addx -1
+addx 5
+addx -1
+addx 5
+addx -1
+addx 5
+addx -1
+addx 5
+addx -1
+addx -35
+addx 1
+addx 24
+addx -19
+addx 1
+addx 16
+addx -11
+noop
+noop
+addx 21
+addx -15
+noop
+noop
+addx -3
+addx 9
+addx 1
+addx -3
+addx 8
+addx 1
+addx 5
+noop
+noop
+noop
+noop
+noop
+addx -36
+noop
+addx 1
+addx 7
+noop
+noop
+noop
+addx 2
+addx 6
+noop
+noop
+noop
+noop
+noop
+addx 1
+noop
+noop
+addx 7
+addx 1
+noop
+addx -13
+addx 13
+addx 7
+noop
+addx 1
+addx -33
+noop
+noop
+noop
+addx 2
+noop
+noop
+noop
+addx 8
+noop
+addx -1
+addx 2
+addx 1
+noop
+addx 17
+addx -9
+addx 1
+addx 1
+addx -3
+addx 11
+noop
+noop
+addx 1
+noop
+addx 1
+noop
+noop
+addx -13
+addx -19
+addx 1
+addx 3
+addx 26
+addx -30
+addx 12
+addx -1
+addx 3
+addx 1
+noop
+noop
+noop
+addx -9
+addx 18
+addx 1
+addx 2
+noop
+noop
+addx 9
+noop
+noop
+noop
+addx -1
+addx 2
+addx -37
+addx 1
+addx 3
+noop
+addx 15
+addx -21
+addx 22
+addx -6
+addx 1
+noop
+addx 2
+addx 1
+noop
+addx -10
+noop
+noop
+addx 20
+addx 1
+addx 2
+addx 2
+addx -6
+addx -11
+noop
+noop
+noop
+"""
+```
+
+## Common
+
+```elixir
+defmodule CPU do
+  defstruct x: 1, cycle: 0
+
+  def new(), do: %CPU{}
+
+  def execute(%CPU{} = cpu, instruction) do
+    case instruction do
+      :noop ->
+        [noop(cpu)]
+
+      {:addx, number} ->
+        %{end: end_of_first_cycle_cpu} = first_cycle = noop(cpu)
+        second_cycle = add(end_of_first_cycle_cpu, number)
+        [first_cycle, second_cycle]
+    end
+  end
+
+  def noop(%CPU{} = cpu) do
+    cpu = bump(cpu)
+    %{start: cpu, during: cpu, end: cpu}
+  end
+
+  def add(%CPU{} = cpu, number) do
+    cpu = bump(cpu)
+    %{start: cpu, during: cpu, end: %{cpu | x: cpu.x + number}}
+  end
+
+  def bump(%CPU{} = cpu) do
+    %{cpu | cycle: cpu.cycle + 1}
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule CPUTests do
+  use ExUnit.Case, async: true
+
+  test "executes noop" do
+    cpu = CPU.new()
+
+    assert CPU.execute(cpu, :noop) == [
+             %{
+               start: %CPU{x: 1, cycle: 1},
+               during: %CPU{x: 1, cycle: 1},
+               end: %CPU{x: 1, cycle: 1}
+             }
+           ]
+  end
+
+  test "executes addx" do
+    cpu = %CPU{x: 1, cycle: 1}
+
+    assert CPU.execute(cpu, {:addx, 3}) == [
+             %{
+               during: %CPU{x: 1, cycle: 2},
+               end: %CPU{x: 1, cycle: 2},
+               start: %CPU{x: 1, cycle: 2}
+             },
+             %{
+               during: %CPU{x: 1, cycle: 3},
+               end: %CPU{x: 4, cycle: 3},
+               start: %CPU{x: 1, cycle: 3}
+             }
+           ]
+  end
+end
+
+ExUnit.run()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+instructions =
+  puzzle_input
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn
+    "noop" -> :noop
+    "addx " <> number -> {:addx, number |> Integer.parse() |> elem(0)}
+  end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+cpu = CPU.new()
+initial = %{start: cpu, during: cpu, end: cpu}
+
+timeline =
+  instructions
+  |> Stream.scan([initial], fn instruction, timeline ->
+    timeline
+    |> List.last()
+    |> Map.fetch!(:end)
+    |> CPU.execute(instruction)
+  end)
+  |> Enum.flat_map(& &1)
+
+timeline = [initial | timeline]
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+signal_prefix = Enum.at(timeline, 20)
+signal_rest = timeline |> Enum.drop(60) |> Enum.take_every(40)
+
+signal = [signal_prefix | signal_rest]
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+signal
+|> Stream.map(fn %{during: %CPU{} = cpu} -> cpu.x * cpu.cycle end)
+|> Enum.sum()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+defmodule CRT do
+  @line_width 40
+  @sprite_offset 1
+
+  defstruct column: 0, pixels: []
+
+  def new(), do: %CRT{}
+
+  def tick(%CRT{} = crt, %CPU{} = cpu) do
+    pixel = if sprite_visible?(crt.column, cpu.x), do: "#", else: "."
+
+    crt
+    |> draw_pixel(pixel)
+    |> next_column()
+  end
+
+  def sprite_visible?(column, x) do
+    x - @sprite_offset <= column and column <= x + @sprite_offset
+  end
+
+  def draw_pixel(crt, pixel) do
+    %{crt | pixels: [pixel | crt.pixels]}
+  end
+
+  def next_column(crt) do
+    next_column = crt.column + 1
+
+    column =
+      if next_column < @line_width do
+        next_column
+      else
+        0
+      end
+
+    %{crt | column: column}
+  end
+
+  def print(crt) do
+    crt.pixels
+    |> Enum.reverse()
+    |> Stream.chunk_every(@line_width)
+    |> Stream.map(&Enum.join/1)
+    |> Enum.join("\n")
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+crt = CRT.new()
+
+timeline
+|> tl()
+|> Enum.reduce(crt, fn %{during: cpu}, crt ->
+  CRT.tick(crt, cpu)
+end)
+|> CRT.print()
+|> IO.puts()
+```
