@@ -1,0 +1,340 @@
+# Day 11
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"},
+  {:deque, "~> 1.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+Monkey 0:
+  Starting items: 79, 98
+  Operation: new = old * 19
+  Test: divisible by 23
+    If true: throw to monkey 2
+    If false: throw to monkey 3
+
+Monkey 1:
+  Starting items: 54, 65, 75, 74
+  Operation: new = old + 6
+  Test: divisible by 19
+    If true: throw to monkey 2
+    If false: throw to monkey 0
+
+Monkey 2:
+  Starting items: 79, 60, 97
+  Operation: new = old * old
+  Test: divisible by 13
+    If true: throw to monkey 1
+    If false: throw to monkey 3
+
+Monkey 3:
+  Starting items: 74
+  Operation: new = old + 3
+  Test: divisible by 17
+    If true: throw to monkey 0
+    If false: throw to monkey 1
+"""
+```
+
+## Common
+
+```elixir
+defmodule Monkey do
+  defstruct [:id]
+
+  def new(id), do: %Monkey{id: id}
+end
+
+defmodule Item do
+  defstruct [:id, :worry, :worries]
+
+  def new(worry), do: %Item{worry: worry, id: make_ref(), worries: %{}}
+end
+```
+
+```elixir
+defmodule Inventory do
+  defstruct items: %{}, transactions: []
+
+  def new(), do: %Inventory{}
+
+  def set(%Inventory{} = inventory, %Monkey{} = monkey, items) do
+    %{inventory | items: Map.put(inventory.items, monkey, items)}
+  end
+
+  def hand(%Inventory{} = inventory, %Item{id: item_id} = item, %Monkey{} = from, %Monkey{} = to) do
+    from_inventory = Map.fetch!(inventory.items, from)
+    to_inventory = Map.get(inventory.items, to, [])
+
+    {%Item{id: ^item_id}, from_inventory} = List.pop_at(from_inventory, 0)
+    to_inventory = to_inventory ++ [item]
+
+    items = inventory.items |> Map.put(from, from_inventory) |> Map.put(to, to_inventory)
+    transactions = [{from, to, item} | inventory.transactions]
+    %{inventory | items: items, transactions: transactions}
+  end
+
+  def items(%Inventory{} = inventory, %Monkey{} = monkey) do
+    Map.get(inventory.items, monkey, [])
+  end
+end
+```
+
+```elixir
+defmodule InspectBehaviour do
+  defstruct [:operation]
+
+  def new(operation), do: %InspectBehaviour{operation: operation}
+
+  def act(%InspectBehaviour{operation: operation}, %Item{} = item) do
+    worry =
+      case operation do
+        {:add, :self} -> item.worry + item.worry
+        {:add, value} -> item.worry + value
+        {:multiply, :self} -> item.worry * item.worry
+        {:multiply, value} -> item.worry * value
+      end
+
+    worry = floor(worry / 3)
+
+    %{item | worry: worry}
+  end
+end
+```
+
+```elixir
+defmodule ThrowBehaviour do
+  defstruct [:operation]
+
+  def new(operation), do: %ThrowBehaviour{operation: operation}
+
+  def act(%ThrowBehaviour{operation: operation}, %Item{} = item) do
+    {divisor, first_monkey, second_monkey} = operation
+    if rem(item.worry, divisor) == 0, do: first_monkey, else: second_monkey
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+defmodule KeepAwayGame do
+  defstruct monkeys: [], inventory: Inventory.new(), inspects: %{}, throws: %{}
+
+  def new(), do: %KeepAwayGame{}
+
+  def add(
+        %KeepAwayGame{} = game,
+        %Monkey{} = monkey,
+        items,
+        inspect_behaviour,
+        %ThrowBehaviour{} = throw_behaviour
+      ) do
+    %{
+      game
+      | monkeys: game.monkeys ++ [monkey],
+        inventory: Inventory.set(game.inventory, monkey, items),
+        inspects: Map.put(game.inspects, monkey, inspect_behaviour),
+        throws: Map.put(game.throws, monkey, throw_behaviour)
+    }
+  end
+
+  def round(%KeepAwayGame{} = game) do
+    Enum.reduce(game.monkeys, game, fn monkey, game ->
+      monkey_move(game, monkey)
+    end)
+  end
+
+  def monkey_move(%KeepAwayGame{} = game, %Monkey{} = monkey) do
+    items = Inventory.items(game.inventory, monkey)
+
+    case items do
+      [] ->
+        game
+
+      items ->
+        inspect_behaviour = Map.fetch!(game.inspects, monkey)
+        throw_behaviour = Map.fetch!(game.throws, monkey)
+
+        Enum.reduce(items, game, fn item, game ->
+          %mod{} = inspect_behaviour
+          item = apply(mod, :act, [inspect_behaviour, item])
+
+          to_monkey = ThrowBehaviour.act(throw_behaviour, item)
+          inventory = Inventory.hand(game.inventory, item, monkey, to_monkey)
+          %{game | inventory: inventory}
+        end)
+    end
+  end
+
+  def monkey_business_level(%KeepAwayGame{} = game) do
+    game.inventory.transactions
+    |> Stream.map(&elem(&1, 0))
+    |> Enum.frequencies()
+    |> Map.values()
+    |> Enum.sort_by(& &1, :desc)
+    |> Enum.take(2)
+    |> Enum.product()
+  end
+end
+```
+
+```elixir
+input = puzzle_input
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+parse_operation = fn line ->
+  [_, operator, operator_value] = Regex.run(~r/(\+|\*)\s*(\d+|old)/, line)
+
+  operator =
+    case operator do
+      "*" -> :multiply
+      "+" -> :add
+    end
+
+  operation_value =
+    case operator_value do
+      "old" -> :self
+      value -> value |> Integer.parse() |> elem(0)
+    end
+
+  {operator, operation_value}
+end
+
+parse_test = fn test_line, first_case_line, second_case_line ->
+  test_value = Regex.run(~r/\d+/, test_line) |> hd |> Integer.parse() |> elem(0)
+
+  first_branch_monkey =
+    Regex.run(~r/\d+/, first_case_line) |> hd |> Integer.parse() |> elem(0) |> Monkey.new()
+
+  second_branch_monkey =
+    Regex.run(~r/\d+/, second_case_line) |> hd |> Integer.parse() |> elem(0) |> Monkey.new()
+
+  {test_value, first_branch_monkey, second_branch_monkey}
+end
+
+monkeys =
+  input
+  |> String.split("\n\n")
+  |> Enum.map(fn monkey ->
+    [monkey_line, items_line, operation_line, test_line, first_case_line, second_case_line] =
+      String.split(monkey, "\n", trim: true)
+
+    monkey = Regex.run(~r/\d+/, monkey_line) |> hd |> Integer.parse() |> elem(0) |> Monkey.new()
+
+    items =
+      Regex.scan(~r/\d+/, items_line)
+      |> Enum.map(fn [value] -> value |> Integer.parse() |> elem(0) |> Item.new() end)
+
+    operation = parse_operation.(operation_line)
+
+    test = parse_test.(test_line, first_case_line, second_case_line)
+
+    {monkey, items, operation, test}
+  end)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+```elixir
+game =
+  Enum.reduce(monkeys, KeepAwayGame.new(), fn monkey, game ->
+    {monkey, items, operation, test} = monkey
+
+    KeepAwayGame.add(
+      game,
+      monkey,
+      items,
+      InspectBehaviour.new(operation),
+      ThrowBehaviour.new(test)
+    )
+  end)
+```
+
+```elixir
+game = Enum.reduce(1..20, game, fn _, game -> KeepAwayGame.round(game) end)
+```
+
+```elixir
+KeepAwayGame.monkey_business_level(game)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+defmodule UnmanagableInspectBehaviour do
+  defstruct [:operation, :divisor]
+
+  def new(operation, divisor),
+    do: %UnmanagableInspectBehaviour{operation: operation, divisor: divisor}
+
+  def act(%UnmanagableInspectBehaviour{operation: operation, divisor: divisor}, %Item{} = item) do
+    worry =
+      case operation do
+        {:add, :self} -> item.worry + item.worry
+        {:add, value} -> item.worry + value
+        {:multiply, :self} -> item.worry * item.worry
+        {:multiply, value} -> item.worry * value
+      end
+
+    %{item | worry: rem(worry, divisor)}
+  end
+end
+```
+
+```elixir
+round_divisor =
+  monkeys
+  |> Stream.map(fn monkey ->
+    {_monkey, _items, _operation, {divisor, _, _}} = monkey
+    divisor
+  end)
+  |> Enum.product()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+game =
+  Enum.reduce(monkeys, KeepAwayGame.new(), fn monkey, game ->
+    {monkey, items, operation, test} = monkey
+
+    KeepAwayGame.add(
+      game,
+      monkey,
+      items,
+      UnmanagableInspectBehaviour.new(operation, round_divisor),
+      ThrowBehaviour.new(test)
+    )
+  end)
+```
+
+```elixir
+game = Enum.reduce(1..10000, game, fn _, game -> KeepAwayGame.round(game) end)
+```
+
+```elixir
+KeepAwayGame.monkey_business_level(game)
+```
