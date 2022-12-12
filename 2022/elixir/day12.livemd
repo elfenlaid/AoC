@@ -1,0 +1,299 @@
+# Day 12
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+Sabqponm
+abcryxxl
+accszExk
+acctuvwj
+abdefghi
+"""
+```
+
+## Common
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+input = puzzle_input
+```
+
+```elixir
+defmodule Landscape do
+  defstruct points: %{}
+
+  @start_elevation ?S
+  @goal_elevation ?E
+
+  def new(elevations) do
+    point =
+      for {line, y} <- Enum.with_index(elevations),
+          {elevation, x} <- Enum.with_index(line),
+          into: %{} do
+        {{x, y}, elevation}
+      end
+
+    %Landscape{points: point}
+  end
+
+  def start_point(%Landscape{} = ls) do
+    find_point(ls, fn {_, elevation} -> elevation == @start_elevation end)
+  end
+
+  def goal_point(%Landscape{} = ls) do
+    find_point(ls, fn {_, elevation} -> elevation == @goal_elevation end)
+  end
+
+  def find_point(%Landscape{} = ls, predicate) do
+    Enum.find(ls.points, fn point -> predicate.(point) end)
+  end
+
+  def neighbours(%Landscape{} = ls, {point, _}) do
+    ls.points
+    |> Map.take(point_cross_neighbours(point))
+    |> Enum.into([])
+  end
+
+  def point_cross_neighbours({x, y}) do
+    [{x - 1, y}, {x + 1, y}, {x, y - 1}, {x, y + 1}]
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule LandscapeTests do
+  use ExUnit.Case, async: true
+
+  @elevations [
+    'Sabqponm',
+    'abcryxxE'
+  ]
+
+  test "constructs from elevations" do
+    assert Landscape.new(@elevations) == %Landscape{
+             points: %{
+               {0, 0} => ?S,
+               {0, 1} => ?a,
+               {1, 0} => ?a,
+               {1, 1} => ?b,
+               {2, 0} => ?b,
+               {2, 1} => ?c,
+               {3, 0} => ?q,
+               {3, 1} => ?r,
+               {4, 0} => ?p,
+               {4, 1} => ?y,
+               {5, 0} => ?o,
+               {5, 1} => ?x,
+               {6, 0} => ?n,
+               {6, 1} => ?x,
+               {7, 0} => ?m,
+               {7, 1} => ?E
+             }
+           }
+  end
+
+  test "finds start point" do
+    ls = Landscape.new(@elevations)
+
+    assert Landscape.start_point(ls) == {{0, 0}, ?S}
+  end
+
+  test "finds goal point" do
+    ls = Landscape.new(@elevations)
+
+    assert Landscape.goal_point(ls) == {{7, 1}, ?E}
+  end
+
+  test "queries neighbours" do
+    ls = Landscape.new(@elevations)
+
+    assert Landscape.neighbours(ls, {{0, 0}, ?S}) == [{{0, 1}, ?a}, {{1, 0}, ?a}]
+  end
+end
+
+ExUnit.run()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+landscape =
+  input
+  |> String.split("\n", trim: true)
+  |> Enum.map(&String.to_charlist/1)
+  |> Landscape.new()
+```
+
+```elixir
+defmodule Navigation do
+  def get_route(%Landscape{} = ls) do
+    from = Landscape.start_point(ls)
+    to = Landscape.goal_point(ls)
+
+    get_shortest_path(ls, from, to)
+  end
+
+  def get_shortest_path(%Landscape{} = ls, from, to) do
+    get_shortest_path(ls, MapSet.new([from]), to, %{{from, 0} => nil}, MapSet.new(), 0)
+  end
+
+  def get_shortest_path(%Landscape{} = ls, to_see, to, paths, seen, layer) do
+    if to in to_see do
+      Stream.unfold({to, layer}, fn
+        nil -> nil
+        {point, _} = pl -> {point, Map.get(paths, pl)}
+      end)
+      |> Enum.to_list()
+      |> Enum.reverse()
+    else
+      seen = Enum.reduce(to_see, seen, &MapSet.put(&2, &1))
+
+      {neighbours, paths} =
+        Enum.reduce(to_see, {MapSet.new(), paths}, fn current_point, {neighbours, paths} ->
+          {_, current_elevation} = current_point
+
+          current_point_neighbours = Landscape.neighbours(ls, current_point)
+
+          Enum.reduce(current_point_neighbours, {neighbours, paths}, fn point,
+                                                                        {neighbours, paths} = acc ->
+            {_, elevation} = point
+
+            cond do
+              point in seen ->
+                acc
+
+              not can_step?(current_elevation, elevation) ->
+                acc
+
+              :valid ->
+                neighbours = MapSet.put(neighbours, point)
+                paths = Map.put(paths, {point, layer + 1}, {current_point, layer})
+
+                {neighbours, paths}
+            end
+          end)
+        end)
+
+      if Enum.empty?(neighbours) do
+        nil
+      else
+        get_shortest_path(ls, neighbours, to, paths, seen, layer + 1)
+      end
+    end
+  end
+
+  def can_step?(from_elevation, to_elevation) do
+    normalize(to_elevation) - normalize(from_elevation) <= 1
+  end
+
+  def normalize(elevation) do
+    case elevation do
+      ?S -> ?a
+      ?E -> ?z
+      elevation -> elevation
+    end
+  end
+end
+```
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule NavigationTests do
+  use ExUnit.Case, async: true
+
+  @elevations [
+    'Sabqponm',
+    'abcryxxl',
+    'accszExk',
+    'acctuvwj',
+    'abdefghi'
+  ]
+
+  test "can elevate one step at a time" do
+    assert Navigation.can_step?(?a, ?b)
+    refute Navigation.can_step?(?a, ?c)
+  end
+
+  test "can step on the same elevation" do
+    assert Navigation.can_step?(?a, ?a)
+  end
+
+  test "can step on a lower elevation" do
+    assert Navigation.can_step?(?b, ?a)
+  end
+
+  test "can step on a goal elevation" do
+    assert Navigation.can_step?(?y, ?E)
+  end
+
+  test "can step from a start elevation" do
+    assert Navigation.can_step?(?S, ?a)
+  end
+
+  test "gets the shortest path" do
+    ls = Landscape.new(@elevations)
+
+    assert Navigation.get_shortest_path(ls, {{0, 0}, ?S}, {{0, 4}, ?a}) == [
+             {{0, 0}, ?S},
+             {{0, 1}, ?a},
+             {{0, 2}, ?a},
+             {{0, 3}, ?a},
+             {{0, 4}, ?a}
+           ]
+  end
+end
+
+ExUnit.run()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+landscape |> Navigation.get_route() |> tl |> Enum.count()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+goal = Landscape.goal_point(landscape)
+```
+
+```elixir
+landscape.points
+|> Stream.filter(fn {_, elevation} -> elevation in [?a, ?S] end)
+|> Stream.map(&Navigation.get_shortest_path(landscape, &1, goal))
+|> Stream.filter(& &1)
+|> Stream.map(fn path -> path |> tl |> Enum.count() end)
+|> Enum.min()
+```
