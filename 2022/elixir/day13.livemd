@@ -1,0 +1,207 @@
+# Day 13
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"},
+  {:nimble_parsec, "~> 1.2.3"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+[1,1,3,1,1]
+[1,1,5,1,1]
+
+[[1],[2,3,4]]
+[[1],4]
+
+[9]
+[[8,7,6]]
+
+[[4,4],4,4]
+[[4,4],4,4,4]
+
+[7,7,7,7]
+[7,7,7]
+
+[]
+[3]
+
+[[[]]]
+[[]]
+
+[1,[2,[3,[4,[5,6,7]]]],8,9]
+[1,[2,[3,[4,[5,6,0]]]],8,9]
+"""
+```
+
+## Common
+
+```elixir
+defmodule PacketParser do
+  import NimbleParsec
+
+  eol =
+    choice([
+      string("\r\n"),
+      string("\n")
+    ])
+
+  value = choice([parsec(:list), integer(min: 1)])
+
+  values = value |> repeat(ignore(string(",")) |> concat(value))
+
+  defcombinatorp(
+    :list,
+    ignore(string("["))
+    |> repeat(values)
+    |> ignore(string("]"))
+    |> wrap()
+  )
+
+  pair = parsec(:list) |> ignore(eol) |> parsec(:list) |> wrap()
+
+  defparsec(
+    :signal,
+    pair |> repeat(ignore(eol) |> ignore(eol) |> concat(pair))
+  )
+end
+```
+
+```elixir
+defmodule Packets do
+  def valid_pair?([lhs, rhs]) do
+    valid_pair?(lhs, rhs)
+  end
+
+  def valid_pair?(lhs, rhs) do
+    case right_order?(lhs, rhs) do
+      {:halt, result} -> result
+      :cont -> throw(:not_enough_data)
+    end
+  end
+
+  def right_order?([], [_ | _]), do: {:halt, true}
+  def right_order?([_ | _], []), do: {:halt, false}
+  def right_order?([], []), do: :cont
+
+  def right_order?([lhs | lhs_rest], [rhs | rhs_rest]) do
+    cond do
+      is_list(lhs) || is_list(rhs) ->
+        case right_order?(List.wrap(lhs), List.wrap(rhs)) do
+          {:halt, _} = value -> value
+          :cont -> right_order?(lhs_rest, rhs_rest)
+        end
+
+      lhs == rhs ->
+        right_order?(lhs_rest, rhs_rest)
+
+      lhs < rhs ->
+        {:halt, true}
+
+      lhs > rhs ->
+        {:halt, false}
+    end
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule PacketsTests do
+  use ExUnit.Case, async: true
+
+  test "compares a pair of packets" do
+    assert Packets.valid_pair?([[1, 1, 3], [1, 1, 5]])
+  end
+
+  test "wraps values when comparing with lists" do
+    assert Packets.valid_pair?([1], [[3]])
+    assert Packets.valid_pair?([[1], [2, 3, 4]], [[1], 4])
+    refute Packets.valid_pair?([9], [[8, 7, 6]])
+
+    refute Packets.valid_pair?(
+             [1, [2, [3, [4, [5, 6, 7]]]], 8, 9],
+             [1, [2, [3, [4, [5, 6, 0]]]], 8, 9]
+           )
+  end
+
+  test "compares values" do
+    assert Packets.valid_pair?([1, 1, 3, 1, 1], [1, 1, 5, 1, 1])
+  end
+
+  test "lists of different length" do
+    assert Packets.valid_pair?([[4, 4], 4, 4], [[4, 4], 4, 4, 4])
+    refute Packets.valid_pair?([7, 7, 7, 7], [7, 7, 7])
+    assert Packets.valid_pair?([], [3])
+    refute Packets.valid_pair?([[[]]], [[]])
+  end
+end
+
+ExUnit.run()
+```
+
+```elixir
+input = puzzle_input
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{:ok, signal, _left, _context, _offset, _line} = PacketParser.signal(input)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+signal
+|> Stream.map(&Packets.valid_pair?/1)
+|> Stream.with_index(1)
+|> Stream.filter(&elem(&1, 0))
+|> Stream.map(&elem(&1, 1))
+|> Enum.sum()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+divider_packets = [[[2]], [[6]]]
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+packets = divider_packets ++ Enum.flat_map(signal, & &1)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+packets
+|> Enum.sort(&Packets.valid_pair?/2)
+|> Stream.with_index(1)
+|> Stream.filter(fn {packet, _} -> packet in divider_packets end)
+|> Stream.map(&elem(&1, 1))
+|> Enum.product()
+```
