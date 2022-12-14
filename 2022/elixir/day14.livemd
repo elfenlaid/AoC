@@ -1,0 +1,320 @@
+# Day 14
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"},
+  {:nimble_parsec, "~> 1.2.3"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+498,4 -> 498,6 -> 496,6
+503,4 -> 502,4 -> 502,9 -> 494,9
+"""
+```
+
+## Common
+
+```elixir
+defmodule ScanParser do
+  import NimbleParsec
+
+  value = integer(min: 1)
+
+  point = value |> ignore(string(",")) |> concat(value) |> wrap()
+
+  line = point |> repeat(ignore(string(" -> ")) |> concat(point)) |> wrap()
+
+  defparsec(
+    :scan,
+    line |> repeat(ignore(string("\n")) |> concat(line))
+  )
+end
+```
+
+```elixir
+defmodule CavePlanner do
+  def get_rock_points(lines) do
+    lines
+    |> Enum.flat_map(fn line ->
+      ranges = Enum.zip(line, tl(line))
+
+      Enum.flat_map(ranges, fn {[startX, startY], [endX, endY]} ->
+        for x <- startX..endX, y <- startY..endY, do: {x, y}
+      end)
+    end)
+  end
+end
+```
+
+```elixir
+defmodule Cave do
+  defstruct tiles: %{}, bottom: 0
+
+  def new(), do: %Cave{}
+
+  def place_rock(%Cave{} = cave, point) do
+    cave = %{cave | tiles: Map.put(cave.tiles, point, :rock)}
+    %{cave | bottom: rock_bottom(cave)}
+  end
+
+  def place_sand(%Cave{} = cave, point) do
+    %{cave | tiles: Map.put_new(cave.tiles, point, :sand)}
+  end
+
+  def move_sand(%Cave{} = cave, from, to) do
+    from_tile = cave.tiles[from]
+    to_tile = cave.tiles[to]
+
+    cond do
+      from_tile != :sand ->
+        :error
+
+      to_tile != nil ->
+        :error
+
+      :ok ->
+        %{
+          cave
+          | tiles:
+              cave.tiles
+              |> Map.delete(from)
+              |> Map.put(to, from_tile)
+        }
+    end
+  end
+
+  def remove_sand(%Cave{} = cave, from) do
+    %{cave | tiles: Map.delete(cave.tiles, from)}
+  end
+
+  def count(%Cave{} = cave, tile) do
+    Enum.count(cave.tiles, fn {_, t} -> t == tile end)
+  end
+
+  def at(%Cave{} = cave, tile) do
+    cave.tiles[tile]
+  end
+
+  def rock_bottom(%Cave{} = cave) do
+    cave.tiles
+    |> Stream.filter(fn {_point, tile} -> tile == :rock end)
+    |> Stream.map(fn {{_x, y}, _tile} -> y end)
+    |> Stream.uniq()
+    |> Enum.sort(:desc)
+    |> List.first()
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+input = puzzle_input
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{:ok, scan, _rest, _context, _offset, _line} = ScanParser.scan(input)
+```
+
+```elixir
+rocks = CavePlanner.get_rock_points(scan)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+cave = Enum.reduce(rocks, Cave.new(), &Cave.place_rock(&2, &1))
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+```elixir
+defmodule AbyssSimulation do
+  @sand {500, 0}
+
+  defstruct [:cave, :sand]
+
+  def new(cave) do
+    %AbyssSimulation{cave: cave}
+  end
+
+  def run(%AbyssSimulation{} = simulation) do
+    simulation
+    |> emit_sand()
+    |> move_sand()
+    |> case do
+      {:error, simulation} ->
+        # the sand have settled, stop tracking it
+        run(%{simulation | sand: nil})
+
+      {:ok, simulation} ->
+        if sand_falling_to_abys?(simulation) do
+          # remove falling through sand before stopping the simulation
+          %{cave: cave, sand: sand} = simulation
+          %{simulation | cave: Cave.remove_sand(cave, sand), sand: nil}
+        else
+          run(simulation)
+        end
+    end
+  end
+
+  def sand_falling_to_abys?(%AbyssSimulation{} = simulation) do
+    %{sand: {_x, sandY}} = simulation
+    sandY >= simulation.cave.bottom
+  end
+
+  def emit_sand(%AbyssSimulation{} = simulation) do
+    if simulation.sand == nil do
+      %{simulation | cave: Cave.place_sand(simulation.cave, @sand), sand: @sand}
+    else
+      simulation
+    end
+  end
+
+  def move_sand(%AbyssSimulation{} = simulation) do
+    %{sand: {x, y}} = simulation
+
+    down = {x, y + 1}
+    down_left = {x - 1, y + 1}
+    down_right = {x + 1, y + 1}
+
+    simulation
+    |> move_sand_if_needed(down)
+    |> move_sand_if_needed(down_left)
+    |> move_sand_if_needed(down_right)
+  end
+
+  def move_sand_if_needed({:ok, _simulation} = value, _to), do: value
+  def move_sand_if_needed({:error, simulation}, to), do: move_sand_if_needed(simulation, to)
+
+  def move_sand_if_needed(%AbyssSimulation{} = simulation, to) do
+    case Cave.move_sand(simulation.cave, simulation.sand, to) do
+      %Cave{} = cave ->
+        {:ok, %{simulation | cave: cave, sand: to}}
+
+      :error ->
+        {:error, simulation}
+    end
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+cave
+|> AbyssSimulation.new()
+|> AbyssSimulation.run()
+|> then(& &1.cave)
+|> Cave.count(:sand)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+defmodule BoxSimulation do
+  @sand {500, 0}
+  @floor_offset 2
+
+  defstruct [:cave, :sand]
+
+  def new(cave) do
+    %BoxSimulation{cave: cave}
+  end
+
+  def run(%BoxSimulation{} = simulation) do
+    simulation
+    |> emit_sand()
+    |> move_sand()
+    |> case do
+      {:error, simulation} ->
+        if can_emit_sand?(simulation) do
+          run(%{simulation | sand: nil})
+        else
+          simulation
+        end
+
+      {:ok, simulation} ->
+        run(simulation)
+    end
+  end
+
+  def can_emit_sand?(%BoxSimulation{} = simulation) do
+    Cave.at(simulation.cave, @sand) == nil
+  end
+
+  def emit_sand(%BoxSimulation{} = simulation) do
+    if simulation.sand == nil do
+      %{simulation | cave: Cave.place_sand(simulation.cave, @sand), sand: @sand}
+    else
+      simulation
+    end
+  end
+
+  def move_sand(%BoxSimulation{} = simulation) do
+    %{sand: {x, y}} = simulation
+
+    next_height = y + 1
+
+    if next_height >= bottom(simulation) do
+      {:error, simulation}
+    else
+      down = {x, next_height}
+      down_left = {x - 1, next_height}
+      down_right = {x + 1, next_height}
+
+      simulation
+      |> move_sand_if_needed(down)
+      |> move_sand_if_needed(down_left)
+      |> move_sand_if_needed(down_right)
+    end
+  end
+
+  def move_sand_if_needed({:ok, _simulation} = value, _to), do: value
+  def move_sand_if_needed({:error, simulation}, to), do: move_sand_if_needed(simulation, to)
+
+  def move_sand_if_needed(%BoxSimulation{} = simulation, to) do
+    case Cave.move_sand(simulation.cave, simulation.sand, to) do
+      %Cave{} = cave ->
+        {:ok, %{simulation | cave: cave, sand: to}}
+
+      :error ->
+        {:error, simulation}
+    end
+  end
+
+  def bottom(%BoxSimulation{cave: cave}) do
+    cave.bottom + @floor_offset
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+cave
+|> BoxSimulation.new()
+|> BoxSimulation.run()
+|> then(& &1.cave)
+|> Cave.count(:sand)
+```
