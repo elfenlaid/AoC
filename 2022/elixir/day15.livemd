@@ -1,0 +1,234 @@
+# Day 15
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+Sensor at x=2, y=18: closest beacon is at x=-2, y=15
+Sensor at x=9, y=16: closest beacon is at x=10, y=16
+Sensor at x=13, y=2: closest beacon is at x=15, y=3
+Sensor at x=12, y=14: closest beacon is at x=10, y=16
+Sensor at x=10, y=20: closest beacon is at x=10, y=16
+Sensor at x=14, y=17: closest beacon is at x=10, y=16
+Sensor at x=8, y=7: closest beacon is at x=2, y=10
+Sensor at x=2, y=0: closest beacon is at x=2, y=10
+Sensor at x=0, y=11: closest beacon is at x=2, y=10
+Sensor at x=20, y=14: closest beacon is at x=25, y=17
+Sensor at x=17, y=20: closest beacon is at x=21, y=22
+Sensor at x=16, y=7: closest beacon is at x=15, y=3
+Sensor at x=14, y=3: closest beacon is at x=15, y=3
+Sensor at x=20, y=1: closest beacon is at x=15, y=3
+"""
+```
+
+```elixir
+input = puzzle_input
+```
+
+## Common
+
+```elixir
+defmodule Reading do
+  defstruct [:sensor, :beacon]
+
+  def new(sensor, beacon) do
+    %Reading{sensor: sensor, beacon: beacon}
+  end
+
+  def distance(%Reading{} = reading) do
+    manhattan_distance(reading.sensor, reading.beacon)
+  end
+
+  def vertical_range(%Reading{} = reading) do
+    distance = distance(reading)
+
+    {_sX, sY} = reading.sensor
+
+    (sY - distance)..(sY + distance)
+  end
+
+  def horizontal_range(%Reading{} = reading) do
+    distance = distance(reading)
+
+    {sX, _sY} = reading.sensor
+
+    (sX - distance)..(sX + distance)
+  end
+
+  def horizontal_range(%Reading{} = reading, row) do
+    if row in vertical_range(reading) do
+      distance = manhattan_distance(reading.sensor, reading.beacon)
+      {sensorX, sensorY} = reading.sensor
+
+      delta = distance - abs(sensorY - row)
+      (sensorX - delta)..(sensorX + delta)
+    else
+      nil
+    end
+  end
+
+  def covers?(%Reading{} = reading, point) do
+    beacon_distance = manhattan_distance(reading.sensor, reading.beacon)
+    point_distance = manhattan_distance(reading.sensor, point)
+
+    point_distance <= beacon_distance
+  end
+
+  def manhattan_distance({x1, y1}, {x2, y2}) do
+    abs(x1 - x2) + abs(y1 - y2)
+  end
+end
+```
+
+```elixir
+defmodule Ranges do
+  defp concat(
+         %Range{first: head_start, last: head_end},
+         [%Range{first: next_start, last: next_end} | tail]
+       )
+       when next_end >= head_start do
+    [next_start..max(next_end, head_end) | tail]
+  end
+
+  defp concat(head, rest), do: [head | rest]
+
+  defp prep([]), do: []
+  defp prep([head | tail]), do: [[head] | tail]
+
+  def merge(ranges) do
+    ranges
+    |> Enum.sort()
+    |> prep()
+    |> Enum.reduce(&concat/2)
+    |> Enum.reverse()
+  end
+end
+```
+
+```elixir
+to_integer = fn str ->
+  str |> Integer.parse() |> elem(0)
+end
+
+readings =
+  input
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn reading ->
+    [[sensorX, sensorY], [beaconX, beaconY]] =
+      Regex.scan(~r/x=(?<x>-?\d+), y=(?<y>-?\d+)/, reading, capture: :all_names)
+
+    Reading.new(
+      {to_integer.(sensorX), to_integer.(sensorY)},
+      {to_integer.(beaconX), to_integer.(beaconY)}
+    )
+  end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule ReadingTests do
+  use ExUnit.Case, async: true
+
+  test "covers edge points" do
+    reading = Reading.new({8, 7}, {2, 10})
+
+    assert Reading.covers?(reading, {2, 10})
+  end
+
+  test "doesn't cover points outside its distance" do
+    reading = Reading.new({8, 7}, {2, 10})
+
+    refute Reading.covers?(reading, {-1, -2})
+    refute Reading.covers?(reading, {16, 17})
+  end
+
+  test "calculates horizontal range given inside row" do
+    reading = %Reading{sensor: {8, 7}, beacon: {2, 10}}
+    assert Reading.horizontal_range(reading, 10) == 2..14
+  end
+
+  test "calculates horizontal range given outside row" do
+    reading = %Reading{sensor: {8, 7}, beacon: {2, 10}}
+    refute Reading.horizontal_range(reading, 18)
+  end
+end
+
+ExUnit.run()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+row = 2_000_000
+{%{beacon: {left, _}}, %{beacon: {right, _}}} = Enum.min_max_by(readings, &elem(&1.beacon, 0))
+```
+
+```elixir
+readings
+|> Task.async_stream(fn reading ->
+  {beaconX, beaconY} = reading.beacon
+
+  reading
+  |> Reading.horizontal_range(row)
+  |> then(&MapSet.new(if &1 == nil, do: [], else: &1))
+  |> then(&if beaconY == row, do: MapSet.delete(&1, beaconX), else: &1)
+end)
+|> Enum.reduce(MapSet.new(), fn {:ok, result}, acc -> MapSet.union(result, acc) end)
+|> MapSet.size()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+width = height = 4_000_000
+```
+
+```elixir
+[{:ok, {row, ranges}}] =
+  0..height
+  |> Task.async_stream(fn row ->
+    ranges =
+      readings
+      |> Stream.map(&Reading.horizontal_range(&1, row))
+      |> Stream.reject(&(&1 == nil))
+      |> Ranges.merge()
+
+    {row, ranges}
+  end)
+  |> Enum.filter(fn {:ok, {_, ranges}} ->
+    Enum.any?(ranges, fn %{first: first, last: last} ->
+      first > 0 || last < width
+    end)
+  end)
+```
+
+```elixir
+[start, _] = ranges
+{x, y} = {start.last + 1, row}
+x * width + y
+```
