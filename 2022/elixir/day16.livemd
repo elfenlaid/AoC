@@ -1,0 +1,273 @@
+# Day 16
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"},
+  {:libgraph, "~> 0.14"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+Valve AA has flow rate=0; tunnels lead to valves DD, II, BB
+Valve BB has flow rate=13; tunnels lead to valves CC, AA
+Valve CC has flow rate=2; tunnels lead to valves DD, BB
+Valve DD has flow rate=20; tunnels lead to valves CC, AA, EE
+Valve EE has flow rate=3; tunnels lead to valves FF, DD
+Valve FF has flow rate=0; tunnels lead to valves EE, GG
+Valve GG has flow rate=0; tunnels lead to valves FF, HH
+Valve HH has flow rate=22; tunnel leads to valve GG
+Valve II has flow rate=0; tunnels lead to valves AA, JJ
+Valve JJ has flow rate=21; tunnel leads to valve II
+"""
+```
+
+```elixir
+input = example_input
+```
+
+## Common
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+scan =
+  input
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn line ->
+    [valve, tunnels] = String.split(line, "; ", parts: 2)
+
+    ["Valve", valve, _, _, "rate", rate] = String.split(valve, [" ", "="])
+    tunnels = tunnels |> String.split([" ", ", "]) |> Enum.drop(4)
+
+    %{valve: valve, tunnels: tunnels, rate: rate |> Integer.parse() |> elem(0)}
+  end)
+```
+
+```elixir
+scan |> Enum.map(&get_in(&1, [:rate])) |> Enum.sort() |> Enum.uniq()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+graph = Graph.new(type: :undirected)
+
+graph =
+  Enum.reduce(scan, graph, fn %{valve: valve, rate: rate, tunnels: tunnels}, graph ->
+    graph =
+      graph
+      |> Graph.add_vertex(valve)
+      |> Graph.label_vertex(valve, rate: rate)
+
+    Enum.reduce(tunnels, graph, fn tunnel, graph ->
+      Graph.add_edge(graph, valve, tunnel)
+    end)
+  end)
+```
+
+```elixir
+graph |> Graph.vertices() |> Enum.count()
+```
+
+```elixir
+defmodule Planner do
+  def calculate_pressure_release(graph, valve, minutes) do
+    valve_rate(graph, valve) * (minutes - 1)
+  end
+
+  def max_pressure_release(graph, current \\ "AA", minutes \\ 30) do
+    max_pressure_release(graph, current, minutes, MapSet.new(), 0)
+  end
+
+  def valve_rate(graph, valve) do
+    Graph.vertex_labels(graph, valve)[:rate]
+  end
+
+  def estimate_pressure_release(
+        graph,
+        current_valve,
+        minutes,
+        opened_valves,
+        visited_valves,
+        cost
+      ) do
+    IO.inspect(current_valve)
+
+    time_is_up? = minutes <= 1
+
+    if time_is_up? do
+      cost
+    else
+      visited_valves = MapSet.put(visited_valves, current_valve)
+
+      cost_if_open_current = cost + calculate_pressure_release(graph, current_valve, minutes)
+
+      open_current_valve? =
+        current_valve not in opened_valves && valve_rate(graph, current_valve) > 0
+
+      neighbors =
+        graph
+        |> Graph.neighbors(current_valve)
+        |> Enum.reject(&(&1 in visited_valves))
+
+      if Enum.empty?(neighbors) do
+        if open_current_valve?, do: cost_if_open_current, else: cost
+      else
+        cost_if_open_current = cost + calculate_pressure_release(graph, current_valve, minutes)
+        minutes_if_skip_current = minutes - 1
+        minutes_if_open_current = minutes - 2
+        opened_valves_if_open_current = MapSet.put(opened_valves, current_valve)
+
+        neighbors
+        |> Enum.map(fn next ->
+          next_if_skip_cost =
+            estimate_pressure_release(
+              graph,
+              next,
+              minutes_if_skip_current,
+              opened_valves,
+              visited_valves,
+              cost
+            )
+
+          if open_current_valve? do
+            next_if_open_cost =
+              estimate_pressure_release(
+                graph,
+                next,
+                minutes_if_open_current,
+                opened_valves_if_open_current,
+                visited_valves,
+                cost_if_open_current
+              )
+
+            max(
+              next_if_open_cost,
+              next_if_skip_cost
+            )
+          else
+            next_if_skip_cost
+          end
+        end)
+        |> Enum.max()
+      end
+    end
+  end
+
+  def max_pressure_release(graph, current_valve, minutes, opened_valves, cost) do
+    time_is_up? = minutes <= 1
+
+    if time_is_up? do
+      cost
+    else
+      open_current_valve? =
+        current_valve not in opened_valves && valve_rate(graph, current_valve) > 0
+
+      cost_if_open_current = cost + calculate_pressure_release(graph, current_valve, minutes)
+      minutes_if_skip_current = minutes - 1
+      minutes_if_open_current = minutes - 2
+      opened_valves_if_open_current = MapSet.put(opened_valves, current_valve)
+
+      graph
+      |> Graph.neighbors(current_valve)
+      |> Enum.max_by(fn next ->
+        estimate_pressure_release(
+          graph,
+          next,
+          minutes_if_skip_current,
+          opened_valves,
+          MapSet.new([current_valve]),
+          0
+        )
+      end)
+      |> then(fn next ->
+        IO.inspect(next)
+
+        next_if_skip_cost =
+          max_pressure_release(
+            graph,
+            next,
+            minutes_if_skip_current,
+            opened_valves,
+            cost
+          )
+
+        if open_current_valve? do
+          next_if_open_cost =
+            max_pressure_release(
+              graph,
+              next,
+              minutes_if_open_current,
+              opened_valves_if_open_current,
+              cost_if_open_current
+            )
+
+          max(
+            next_if_open_cost,
+            next_if_skip_cost
+          )
+        else
+          next_if_skip_cost
+        end
+      end)
+    end
+  end
+end
+```
+
+```elixir
+Planner.estimate_pressure_release(graph, "AA", 30, MapSet.new(), MapSet.new(), 0)
+```
+
+```elixir
+Planner.estimate_pressure_release(graph, "II", 30, MapSet.new(), MapSet.new(["AA"]), 0)
+```
+
+```elixir
+Planner.estimate_pressure_release(graph, "BB", 30, MapSet.new(), MapSet.new(["AA"]), 0)
+```
+
+```elixir
+Planner.estimate_pressure_release(graph, "II", 30, MapSet.new(["JJ"]), MapSet.new(["AA"]), 0)
+```
+
+```elixir
+Planner.max_pressure_release(graph, "AA", 30)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+ExUnit.run()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+```elixir
+
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+
+```
