@@ -1,0 +1,543 @@
+# Day 17
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = ">>><<><>><<<>><>>><<<>>><<<><<<>><>><<>>"
+```
+
+## Common
+
+```elixir
+input = example_input
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+jets =
+  input
+  |> String.codepoints()
+  |> Enum.map(fn
+    ">" -> :right
+    "<" -> :left
+  end)
+```
+
+```elixir
+defmodule Rock do
+  @enforce_keys [:tiles, :origin]
+  defstruct [:tiles, :origin]
+
+  def new(tiles, origin \\ {0, 0}), do: %Rock{tiles: tiles, origin: origin}
+
+  def tiles(%Rock{} = rock) do
+    rock |> tiles_stream() |> Enum.to_list()
+  end
+
+  def tiles_stream(%Rock{} = rock) do
+    Stream.map(rock.tiles, &relate_tile_to_origin(&1, rock.origin))
+  end
+
+  def offset(%Rock{} = rock, {x, y}) do
+    {originX, originY} = rock.origin
+    %{rock | origin: {originX + x, originY + y}}
+  end
+
+  def left(%Rock{} = rock) do
+    elem(rock.origin, 0)
+  end
+
+  def right(%Rock{} = rock) do
+    rock
+    |> tiles_stream()
+    |> Stream.map(&elem(&1, 0))
+    |> Enum.max()
+  end
+
+  def top(%Rock{} = rock) do
+    rock
+    |> tiles_stream()
+    |> Stream.map(&elem(&1, 1))
+    |> Enum.max()
+  end
+
+  def bottom(%Rock{} = rock) do
+    elem(rock.origin, 1)
+  end
+
+  def relate_tile_to_origin(tile, origin) do
+    {tileX, tileY} = tile
+    {originX, originY} = origin
+
+    {originX + tileX, originY + tileY}
+  end
+
+  def plank(), do: Rock.new([{0, 0}, {1, 0}, {2, 0}, {3, 0}])
+
+  def cross(),
+    do:
+      Rock.new([
+        # first row
+        {1, 0},
+        # second row
+        {0, 1},
+        {1, 1},
+        {2, 1},
+        # third row
+        {1, 2}
+      ])
+
+  def l(),
+    do:
+      Rock.new([
+        {2, 2},
+        {2, 1},
+        {0, 0},
+        {1, 0},
+        {2, 0}
+      ])
+
+  def i(),
+    do:
+      Rock.new([
+        {0, 0},
+        {0, 1},
+        {0, 2},
+        {0, 3}
+      ])
+
+  def block(),
+    do:
+      Rock.new([
+        # first row
+        {0, 0},
+        {1, 0},
+        # second row
+        {0, 1},
+        {1, 1}
+      ])
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule RockTests do
+  use ExUnit.Case, async: true
+
+  test "offset rock" do
+    rock = Rock.new([{0, 0}], {0, 0})
+
+    assert Rock.offset(rock, {1, 1}) == %Rock{origin: {1, 1}, tiles: [{0, 0}]}
+  end
+
+  test "bounds" do
+    rock =
+      Rock.new([
+        # first row
+        {1, 0},
+        # second row
+        {0, 1},
+        {1, 1},
+        {2, 1},
+        # third row
+        {1, 2}
+      ])
+
+    assert Rock.left(rock) == 0
+    assert Rock.right(rock) == 2
+    assert Rock.top(rock) == 2
+    assert Rock.bottom(rock) == 0
+  end
+
+  test "tiles" do
+    rock =
+      Rock.new(
+        [
+          # first row
+          {1, 0},
+          # second row
+          {0, 1},
+          {1, 1},
+          {2, 1},
+          # third row
+          {1, 2}
+        ],
+        {3, 5}
+      )
+
+    assert Rock.tiles(rock) == [{4, 5}, {3, 6}, {4, 6}, {5, 6}, {4, 7}]
+  end
+end
+
+ExUnit.run()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+defmodule Rotation do
+  defstruct [:elements, :current]
+
+  def new(elements, current \\ 0) do
+    %Rotation{
+      current: current,
+      elements: elements
+    }
+  end
+
+  def next(%Rotation{} = rotation) do
+    element = elem(rotation.elements, rotation.current)
+    {element, %{rotation | current: rem(rotation.current + 1, tuple_size(rotation.elements))}}
+  end
+
+  def rock_rotation() do
+    Rotation.new({
+      Rock.plank(),
+      Rock.cross(),
+      Rock.l(),
+      Rock.i(),
+      Rock.block()
+    })
+  end
+end
+```
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule RotationTests do
+  use ExUnit.Case, async: true
+
+  test "rotates" do
+    rotation = Rotation.rock_rotation()
+
+    assert {%Rock{} = first, %Rotation{} = rotation} = Rotation.next(rotation)
+    assert {%Rock{} = second, %Rotation{}} = Rotation.next(rotation)
+    assert first != second
+  end
+end
+
+ExUnit.run()
+```
+
+```elixir
+defmodule Chamber do
+  @width 7
+  defstruct [:top, :tiles, :columns]
+
+  def new(), do: %Chamber{top: 0, tiles: MapSet.new(), columns: %{}}
+
+  def empty_at?(%Chamber{} = chamber, {x, y}) do
+    cond do
+      x < 0 || x >= @width ->
+        false
+
+      y < 0 ->
+        false
+
+      :else ->
+        top_column_tile = Map.get(chamber.columns, x, -1)
+        top_column_tile < y
+    end
+  end
+
+  def add_tile(%Chamber{} = chamber, tile) do
+    {x, y} = tile
+
+    %{
+      chamber
+      | tiles: MapSet.put(chamber.tiles, tile),
+        top: max(chamber.top, y + 1),
+        columns: Map.update(chamber.columns, x, y, &max(&1, y))
+    }
+  end
+
+  def top(%Chamber{top: top}), do: top
+
+  def garbage_collect(%Chamber{} = chamber), do: %{chamber | tiles: MapSet.new()}
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+defmodule ChamberTests do
+  use ExUnit.Case, async: true
+
+  test "tracks top" do
+    chamber = Chamber.new()
+
+    chamber = chamber |> Chamber.add_tile({0, 0}) |> Chamber.add_tile({0, 1})
+
+    assert Chamber.top(chamber) == 2
+  end
+
+  test "probes tiles" do
+    chamber = Chamber.new()
+    assert Chamber.empty_at?(chamber, {0, 0})
+
+    chamber = Chamber.add_tile(chamber, {0, 0})
+    refute Chamber.empty_at?(chamber, {0, 0})
+  end
+end
+
+ExUnit.run()
+```
+
+```elixir
+defmodule Simulation do
+  @spawn_x_offset 2
+  @spawn_y_offset 3
+
+  defstruct [:jets_rotation, :rocks_rotation, :falling_rock, :chamber, :stopped_rocks_count]
+
+  def new(jets_rotation, rocks_rotation) do
+    %Simulation{
+      jets_rotation: jets_rotation,
+      rocks_rotation: rocks_rotation,
+      falling_rock: nil,
+      chamber: Chamber.new(),
+      stopped_rocks_count: 0
+    }
+  end
+
+  def tick(%Simulation{} = simulation) do
+    simulation
+    |> spawn_rock_if_needed()
+    |> jet_rock_if_possible()
+    |> lower_or_set_rock()
+  end
+
+  def spawn_rock_if_needed(%Simulation{} = simulation) do
+    if simulation.falling_rock != nil do
+      simulation
+    else
+      origin = {@spawn_x_offset, Chamber.top(simulation.chamber) + @spawn_y_offset}
+      {rock, rotation} = Rotation.next(simulation.rocks_rotation)
+
+      %{simulation | rocks_rotation: rotation, falling_rock: %{rock | origin: origin}}
+    end
+  end
+
+  def jet_rock_if_possible(%Simulation{} = simulation) do
+    {jet, rotation} = Rotation.next(simulation.jets_rotation)
+    simulation = %{simulation | jets_rotation: rotation}
+
+    rock_offset =
+      case jet do
+        :left -> {-1, 0}
+        :right -> {1, 0}
+      end
+
+    jetted_rock = Rock.offset(simulation.falling_rock, rock_offset)
+
+    rock_fits_in_chamber? =
+      Enum.all?(Rock.tiles(jetted_rock), &Chamber.empty_at?(simulation.chamber, &1))
+
+    if rock_fits_in_chamber? do
+      %{simulation | falling_rock: jetted_rock}
+    else
+      simulation
+    end
+  end
+
+  def lower_or_set_rock(%Simulation{} = simulation) do
+    lowered_rock = Rock.offset(simulation.falling_rock, {0, -1})
+
+    rock_fits_in_chamber? =
+      Enum.all?(Rock.tiles(lowered_rock), &Chamber.empty_at?(simulation.chamber, &1))
+
+    if rock_fits_in_chamber? do
+      %{simulation | falling_rock: lowered_rock}
+    else
+      chamber =
+        simulation.falling_rock
+        |> Rock.tiles()
+        |> Enum.reduce(simulation.chamber, &Chamber.add_tile(&2, &1))
+
+      %{
+        simulation
+        | falling_rock: nil,
+          chamber: chamber,
+          stopped_rocks_count: simulation.stopped_rocks_count + 1
+      }
+    end
+  end
+
+  def print(%Simulation{chamber: chamber} = simulation) do
+    falling_tiles = (simulation.falling_rock || Rock.new([])) |> Rock.tiles() |> MapSet.new()
+
+    top_falling_tile =
+      if Enum.empty?(falling_tiles),
+        do: 0,
+        else: falling_tiles |> Stream.map(&elem(&1, 1)) |> Enum.max()
+
+    height = max(chamber.top, top_falling_tile)
+    width = 7
+
+    codepoints =
+      for y <- height..-1, x <- -1..width do
+        tile = {x, y}
+
+        cond do
+          y == -1 and x == -1 ->
+            "+"
+
+          y == -1 and x == width ->
+            "+"
+
+          y == -1 ->
+            "-"
+
+          x == width or x == -1 ->
+            "|"
+
+          tile in chamber.tiles ->
+            "#"
+
+          tile in falling_tiles ->
+            "@"
+
+          :empty ->
+            "."
+        end
+      end
+
+    Enum.chunk_every(codepoints, width + 2)
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+jets_rotation = jets |> List.to_tuple() |> Rotation.new()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+simulation = Simulation.new(jets_rotation, Rotation.rock_rotation())
+```
+
+```elixir
+simulation
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.tick()
+|> Simulation.spawn_rock_if_needed()
+|> Simulation.print()
+|> Enum.intersperse("\n")
+|> IO.puts()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+```elixir
+defmodule PartOne do
+  def run(%Simulation{stopped_rocks_count: 2022} = simulation) do
+    simulation
+  end
+
+  def run(simulation) do
+    simulation |> Simulation.tick() |> run()
+  end
+end
+```
+
+```elixir
+simulation |> PartOne.run() |> then(& &1.chamber.top)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+defmodule PartTwo do
+  @elephant_factor 1_000_000_000_000
+
+  def run(%Simulation{stopped_rocks_count: @elephant_factor} = simulation, _count) do
+    simulation
+  end
+
+  def run(simulation, count \\ 0) do
+    simulation =
+      if rem(count, 10000) == 0 do
+        IO.inspect(simulation.stopped_rocks_count / @elephant_factor * 100, label: :progress)
+        %{simulation | chamber: Chamber.garbage_collect(simulation.chamber)}
+      else
+        simulation
+      end
+
+    simulation |> Simulation.tick() |> run(count + 1)
+  end
+end
+```
+
+```elixir
+# simulation |> PartTwo.run() |> then(& &1.chamber.top)
+```
