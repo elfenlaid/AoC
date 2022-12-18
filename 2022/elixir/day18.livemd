@@ -1,0 +1,193 @@
+# Day 18
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+2,2,2
+1,2,2
+3,2,2
+2,1,2
+2,3,2
+2,2,1
+2,2,3
+2,2,4
+2,2,6
+1,2,5
+3,2,5
+2,1,5
+2,3,5
+"""
+```
+
+## Common
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+input = puzzle_input
+```
+
+```elixir
+cubes =
+  input
+  |> String.split([",", "\n"], trim: true)
+  |> Enum.map(&(&1 |> Integer.parse() |> elem(0)))
+  |> Enum.chunk_every(3)
+  |> MapSet.new()
+```
+
+```elixir
+half_side = 0.5
+side = 1
+```
+
+```elixir
+exposed_sides =
+  cubes
+  |> Stream.flat_map(fn [x, y, z] ->
+    [
+      [x - half_side, y, z],
+      [x + half_side, y, z],
+      [x, y - half_side, z],
+      [x, y + half_side, z],
+      [x, y, z - half_side],
+      [x, y, z + half_side]
+    ]
+  end)
+  |> Enum.frequencies()
+  |> Stream.filter(fn {_, value} -> value == 1 end)
+  |> Stream.map(&elem(&1, 0))
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Enum.count(exposed_sides)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+defmodule WaterFlow do
+  defstruct [:cubes, :left, :right, :top, :bottom, :toward, :away]
+
+  def new(cubes) do
+    %WaterFlow{
+      cubes: cubes,
+      left: cubes |> Stream.map(fn [x, _y, _z] -> x end) |> Enum.min(),
+      right: cubes |> Stream.map(fn [x, _y, _z] -> x end) |> Enum.max(),
+      top: cubes |> Stream.map(fn [_x, y, _z] -> y end) |> Enum.max(),
+      bottom: cubes |> Stream.map(fn [_x, y, _z] -> y end) |> Enum.min(),
+      toward: cubes |> Stream.map(fn [_x, _y, z] -> z end) |> Enum.min(),
+      away: cubes |> Stream.map(fn [_x, _y, z] -> z end) |> Enum.max()
+    }
+  end
+
+  def reachable_from_outside?(flow, position) do
+    reachable_from_outside?(flow, [position], MapSet.new([]))
+  end
+
+  def reachable_from_outside?(_flow, [], _seen) do
+    false
+  end
+
+  def reachable_from_outside?(flow, positions, seen) do
+    reached_outside? = Enum.any?(positions, &outside?(flow, &1))
+
+    if reached_outside? do
+      true
+    else
+      seen = MapSet.union(seen, MapSet.new(positions))
+
+      neighbors =
+        positions
+        |> Enum.flat_map(&pocket_neighbors(flow, &1))
+        |> Enum.reject(&(&1 in seen))
+        |> Enum.uniq()
+
+      reachable_from_outside?(flow, neighbors, seen)
+    end
+  end
+
+  def outside?(flow, [x, y, z]) do
+    x <= flow.left || x >= flow.right ||
+      y >= flow.top || y <= flow.bottom ||
+      z >= flow.away || z <= flow.toward
+  end
+
+  def pocket_neighbors(flow, [x, y, z]) do
+    side = 1
+
+    neighbors = [
+      [x - side, y, z],
+      [x + side, y, z],
+      [x, y + side, z],
+      [x, y - side, z],
+      [x, y, z + side],
+      [x, y, z - side]
+    ]
+
+    Enum.reject(neighbors, &(&1 in flow.cubes))
+  end
+end
+```
+
+```elixir
+flow = WaterFlow.new(cubes)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+surface? = fn coordinate ->
+  coordinate - trunc(coordinate) > 0.1
+end
+
+pockets =
+  exposed_sides
+  |> Stream.map(fn [x, y, z] ->
+    [lhs, rhs] =
+      cond do
+        surface?.(x) ->
+          [[round(x - half_side), y, z], [round(x + half_side), y, z]]
+
+        surface?.(y) ->
+          [[x, round(y - half_side), z], [x, round(y + half_side), z]]
+
+        :z ->
+          [[x, y, round(z - half_side)], [x, y, round(z + half_side)]]
+      end
+
+    if lhs in cubes, do: rhs, else: lhs
+  end)
+  |> Stream.reject(&WaterFlow.reachable_from_outside?(flow, &1))
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Enum.count(exposed_sides) - Enum.count(pockets)
+```
