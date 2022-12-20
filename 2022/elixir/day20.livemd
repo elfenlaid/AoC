@@ -1,0 +1,155 @@
+# Day 20
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+1
+2
+-3
+3
+-2
+0
+4
+"""
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+input = puzzle_input
+```
+
+## Common
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+list =
+  input
+  |> String.split("\n", trim: true)
+  |> Stream.map(&(&1 |> Integer.parse() |> elem(0)))
+  |> Enum.with_index()
+```
+
+```elixir
+defmodule Index do
+  defstruct [:list, :size]
+
+  def new(list) do
+    %Index{
+      list: list,
+      size: Enum.count(list)
+    }
+  end
+
+  def move(%Index{} = index, {offset, _} = pair) do
+    current_index = find(index, pair)
+
+    len = index.size - 1
+
+    shift = current_index + offset
+
+    new_index =
+      case shift do
+        val when val <= 0 ->
+          val - len * floor(val / len)
+
+        val when val > len ->
+          rem(val, len)
+
+        val ->
+          val
+      end
+
+    list = index.list |> Enum.reject(&(&1 == pair)) |> List.insert_at(new_index, pair)
+    %{index | list: list}
+  end
+
+  def at(%Index{} = index, i) do
+    index.list |> Enum.at(rem(i, index.size)) |> elem(0)
+  end
+
+  def find(%Index{} = index, {_, _} = value) do
+    index.list
+    |> Stream.with_index()
+    |> Enum.find(fn {element, _index} -> element == value end)
+    |> then(&elem(&1, 1))
+  end
+
+  def find(%Index{} = index, value) do
+    index.list
+    |> Stream.with_index()
+    |> Enum.find(fn {{element, _}, _index} -> element == value end)
+    |> then(&elem(&1, 1))
+  end
+
+  def decryption_key(%Index{} = index) do
+    offset = Index.find(index, 0)
+
+    [1000, 2000, 3000]
+    |> Enum.map(&Index.at(index, &1 + offset))
+    |> Enum.sum()
+  end
+end
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+index = Index.new(list)
+mixed = Enum.reduce(list, index, &Index.move(&2, &1))
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Index.decryption_key(mixed)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+key = 811_589_153
+
+keyed_list = Enum.map(list, fn {elem, index} -> {elem * key, index} end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+mixed =
+  Enum.reduce(1..10, Index.new(keyed_list), fn _, index ->
+    Enum.reduce(keyed_list, index, &Index.move(&2, &1))
+  end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Index.decryption_key(mixed)
+```

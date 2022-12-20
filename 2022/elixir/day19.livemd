@@ -1,0 +1,214 @@
+# Day 19
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+Blueprint 1: Each ore robot costs 4 ore. Each clay robot costs 2 ore. Each obsidian robot costs 3 ore and 14 clay. Each geode robot co|sts 2 ore and 7 obsidian.
+Blueprint 2: Each ore robot costs 2 ore. Each clay robot costs 3 ore. Each obsidian robot costs 3 ore and 8 clay. Each geode robot costs 3 ore and 12 obsidian.
+"""
+```
+
+```elixir
+input = example_input
+```
+
+## Common
+
+```
+Blueprint 1:
+  Each ore robot costs 4 ore.
+  Each clay robot costs 2 ore.
+  Each obsidian robot costs 3 ore and 14 clay.
+  Each geode robot costs 2 ore and 7 obsidian.
+```
+
+```elixir
+blueprint = %{
+  ore_robot: %{ore: 4},
+  clay_robot: %{ore: 2},
+  obsidian_robot: %{ore: 3, clay: 14},
+  geode_robot: %{ore: 2, obsidian: 7}
+}
+
+resources = %{
+  ore: 0,
+  clay: 0,
+  obsidian: 0,
+  geodes: 0
+}
+
+robots = %{
+  ore: 1,
+  clay: 0,
+  obsidian: 0,
+  geodes: 0
+}
+
+state = %{
+  minutes: 30,
+  resources: resources,
+  robots: robots
+}
+
+outcomes = %{
+  state => resources
+}
+```
+
+```elixir
+defmodule State do
+  defstruct minutes: 24,
+            robots: %{
+              ore: 1,
+              clay: 0,
+              obsidian: 0,
+              geodes: 0
+            },
+            resources: %{
+              ore: 0,
+              clay: 0,
+              obsidian: 0,
+              geodes: 0
+            }
+
+  def new(), do: %State{}
+end
+
+defmodule Strategy do
+  defstruct blueprint: %{
+              ore: %{ore: 4},
+              clay: %{ore: 2},
+              obsidian: %{ore: 3, clay: 14},
+              geode: %{ore: 2, obsidian: 7}
+            },
+            state: State.new(),
+            outcomes: %{}
+
+  def new(), do: %Strategy{}
+
+  def can_build?(%Strategy{} = strategy, robot) do
+    cost = strategy.blueprint[robot]
+
+    Enum.all?(cost, fn {resource, amount} ->
+      strategy.state.resources[resource] >= amount
+    end)
+  end
+
+  def build_robot(%Strategy{} = strategy, robot) do
+    cost = strategy.blueprint[robot]
+
+    Enum.reduce(cost, strategy, fn {resource, amount}, strategy ->
+      update_in(
+        strategy,
+        [Access.key!(:state), Access.key!(:resources), Access.key!(resource)],
+        fn current -> current - amount end
+      )
+    end)
+  end
+
+  def collect(%Strategy{} = strategy) do
+    Enum.reduce(strategy.state.robots, strategy, fn {robot, amount}, strategy ->
+      update_in(
+        strategy,
+        [Access.key!(:state), Access.key!(:resources), Access.key!(resource)],
+        fn current -> current + amount end
+      )
+    end)
+  end
+
+  def tick(%Strategy{} = strategy) do
+    Enum.reduce(strategy.state.robots, strategy, fn {robot, amount}, strategy ->
+      update_in(
+        strategy,
+        [Access.key!(:state), Access.key!(:resources), Access.key!(resource)],
+        fn current -> current + amount end
+      )
+  end
+
+  def unlock(%Strategy{} = strategy, robot) do
+    steps = unlock(strategy, robot, [])
+    Enum.reverse(steps)
+  end
+
+  def unlock(%Strategy{} = strategy, robot, steps) do
+    
+  end
+
+  # def outcome(%Strategy{} = strategy) do
+  #   strategy = strategy |> collect() |> tick()
+  #   strategy = tick(strategy)
+
+  #   if strategy.state.minutes == 0 do
+  #     strategy
+  #   else
+  #     # solve
+  #   end
+
+  #   # can build ore robot
+  #   #  outcome with building it
+  #   #  outcome skip building it  
+
+  #   strategy =
+  #     if can_build?(strategy, :ore) do
+  #       strategy |> build_robot(:ore) |> outcome()
+  #     else
+  #       strategy
+  #     end
+
+  #   # can build clay robot
+  #   #  outcome with building it
+  #   #  outcome skip building it
+  #   # can build obsidian robot
+  #   #  outcome with building it
+  #   #  outcome skip building it
+  #   # can build geode robot
+  #   #  outcome with building it
+  #   #  outcome skip building it
+  # end
+end
+```
+
+```elixir
+Strategy.new() |> Strategy.build_robot(:ore)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ExUnit.start(autorun: false)
+
+ExUnit.run()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+```elixir
+
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+
+```
