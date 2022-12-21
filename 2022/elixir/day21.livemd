@@ -1,0 +1,179 @@
+# Day 21
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+root: pppw + sjmn
+dbpl: 5
+cczh: sllz + lgvd
+zczc: 2
+ptdq: humn - dvpt
+dvpt: 3
+lfqf: 4
+humn: 5
+ljgn: 2
+sjmn: drzm * dbpl
+sllz: 4
+pppw: cczh / lfqf
+lgvd: ljgn * ptdq
+drzm: hmdt - zczc
+hmdt: 32
+"""
+```
+
+```elixir
+input = puzzle_input
+```
+
+## Common
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+expressions =
+  input
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn line ->
+    [variable, statement] = String.split(line, ": ", parts: 2)
+
+    statement =
+      case String.split(statement, " ") do
+        [lhs, operator, rhs] -> {:operator, {operator, lhs, rhs}}
+        [value] -> {:value, value |> Integer.parse() |> elem(0)}
+      end
+
+    {variable, statement}
+  end)
+  |> Map.new()
+```
+
+```elixir
+defmodule Runtime do
+  def calculate(expressions, variable \\ "root") do
+    case expressions[variable] do
+      {:operator, {operator, lhs, rhs}} ->
+        lhs = calculate(expressions, lhs)
+        rhs = calculate(expressions, rhs)
+
+        case operator do
+          "+" -> lhs + rhs
+          "-" -> lhs - rhs
+          "/" -> lhs / rhs
+          "*" -> lhs * rhs
+        end
+
+      {:value, value} ->
+        value
+    end
+  end
+
+  def derive(expressions, variable \\ "humn") do
+    {:operator, {_, lhs, rhs}} = expressions["root"]
+
+    lhs_dependent? = variable in dependencies(expressions, lhs)
+    dependent_branch = if lhs_dependent?, do: lhs, else: rhs
+
+    value =
+      if lhs_dependent? do
+        calculate(expressions, rhs)
+      else
+        calculate(expressions, lhs)
+      end
+
+    derive(expressions, value, dependent_branch, variable)
+  end
+
+  def derive(_expressions, value, variable, variable) do
+    value
+  end
+
+  def derive(expressions, value, current_variable, variable) do
+    {:operator, {operator, lhs, rhs}} = expressions[current_variable]
+
+    lhs_dependent? = variable in dependencies(expressions, lhs) || lhs == variable
+    dependent_branch = if lhs_dependent?, do: lhs, else: rhs
+    independent_branch = if lhs_dependent?, do: rhs, else: lhs
+    independent_value = calculate(expressions, independent_branch)
+
+    value_to_derive =
+      case operator do
+        "+" ->
+          # x + independent_value = value
+          # independent_value + x = value
+          value - independent_value
+
+        "-" ->
+          if lhs_dependent? do
+            # x - independent_value = value
+            value + independent_value
+          else
+            # independent_value - x = value
+            independent_value - value
+          end
+
+        "/" ->
+          if lhs_dependent? do
+            # x / independent_value = value
+            value * independent_value
+          else
+            # independent_value / x = value
+            independent_value / value
+          end
+
+        "*" ->
+          # x * independent_value = value
+          # independent_value * x = value
+          value / independent_value
+      end
+
+    derive(expressions, value_to_derive, dependent_branch, variable)
+  end
+
+  def dependencies(expressions, variable, deps \\ MapSet.new()) do
+    case expressions[variable] do
+      {:operator, {_operator, lhs, rhs}} ->
+        deps
+        |> MapSet.put(lhs)
+        |> MapSet.put(rhs)
+        |> MapSet.union(dependencies(expressions, lhs))
+        |> MapSet.union(dependencies(expressions, rhs))
+
+      {:value, _} ->
+        deps
+    end
+  end
+end
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+```elixir
+Runtime.calculate(expressions)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+Runtime.derive(expressions)
+```
