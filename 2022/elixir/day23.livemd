@@ -1,0 +1,229 @@
+# Day 23
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+..............
+..............
+.......#......
+.....###.#....
+...#...#.#....
+....#...##....
+...#.###......
+...##.#.##....
+....#..#......
+..............
+..............
+..............
+"""
+```
+
+```elixir
+input = puzzle_input
+```
+
+## Common
+
+```elixir
+elves =
+  for {line, row} <-
+        input |> String.split("\n", trim: true) |> Enum.reverse() |> Stream.with_index(),
+      {tile, column} <- line |> String.codepoints() |> Stream.with_index(),
+      tile == "#",
+      into: MapSet.new() do
+    {column, row}
+  end
+```
+
+```elixir
+instructions = [
+  :top,
+  :down,
+  :left,
+  :right
+]
+```
+
+```elixir
+defmodule Routing do
+  def needs_to_move?(elves, {x, y} = _elf) do
+    neighbors = [
+      {x - 1, y + 1},
+      {x, y + 1},
+      {x + 1, y + 1},
+      {x - 1, y},
+      {x + 1, y},
+      {x - 1, y - 1},
+      {x, y - 1},
+      {x + 1, y - 1}
+    ]
+
+    Enum.any?(neighbors, &(&1 in elves))
+  end
+
+  def plan(elves, instructions) do
+    {needs_move, can_stay} = Enum.split_with(elves, fn elf -> needs_to_move?(elves, elf) end)
+
+    [moved: moved, blocked: blocked] =
+      Enum.reduce(needs_move, [moved: %{}, blocked: []], fn elf,
+                                                            [moved: moved, blocked: blocked] ->
+        case find_position(elves, elf, instructions) do
+          :blocked -> [moved: moved, blocked: [elf | blocked]]
+          position -> [moved: Map.put(moved, elf, position), blocked: blocked]
+        end
+      end)
+
+    race = Enum.frequencies_by(moved, &elem(&1, 1))
+
+    [moved: moved, blocked: blocked] =
+      Enum.reduce(moved, [moved: [], blocked: blocked], fn {elf, to},
+                                                           [moved: moved, blocked: blocked] ->
+        two_or_more_elves_on_position? = Map.fetch!(race, to) > 1
+
+        if two_or_more_elves_on_position? do
+          [moved: moved, blocked: [elf | blocked]]
+        else
+          [moved: [to | moved], blocked: blocked]
+        end
+      end)
+
+    MapSet.new(moved ++ blocked ++ can_stay)
+  end
+
+  def find_position(elves, elf, instructions) do
+    instructions
+    |> Stream.map(&apply_instruction(elf, &1))
+    |> Enum.find(fn {_position, scans} ->
+      Enum.all?(scans, &(&1 not in elves))
+    end)
+    |> case do
+      nil -> :blocked
+      {position, _} -> position
+    end
+  end
+
+  def apply_instruction({x, y}, instruction) do
+    case instruction do
+      :top ->
+        y = y + 1
+        {{x, y}, [{x, y}, {x - 1, y}, {x + 1, y}]}
+
+      :down ->
+        y = y - 1
+        {{x, y}, [{x, y}, {x - 1, y}, {x + 1, y}]}
+
+      :left ->
+        x = x - 1
+        {{x, y}, [{x, y}, {x, y + 1}, {x, y - 1}]}
+
+      :right ->
+        x = x + 1
+        {{x, y}, [{x, y}, {x, y + 1}, {x, y - 1}]}
+    end
+  end
+end
+```
+
+```elixir
+Routing.apply_instruction({0, 0}, :left)
+```
+
+* If there is no Elf in the N, NE, or NW adjacent positions, the Elf proposes moving north one step.
+* If there is no Elf in the S, SE, or SW adjacent positions, the Elf proposes moving south one step.
+* If there is no Elf in the W, NW, or SW adjacent positions, the Elf proposes moving west one step.
+* If there is no Elf in the E, NE, or SE adjacent positions, the Elf proposes moving east one step.
+
+```elixir
+defmodule Trace do
+  def print(elves) do
+    xs = Stream.map(elves, fn {x, _y} -> x end)
+    ys = Stream.map(elves, fn {_x, y} -> y end)
+
+    top = Enum.max(ys)
+    down = Enum.min(ys)
+    left = Enum.min(xs)
+    right = Enum.max(xs)
+
+    ys = top..down
+    xs = left..right
+
+    for y <- ys, x <- xs do
+      if {x, y} in elves, do: "#", else: "."
+    end
+    |> Enum.chunk_every(Enum.count(xs))
+  end
+
+  def area(elves) do
+    xs = Stream.map(elves, fn {x, _y} -> x end)
+    ys = Stream.map(elves, fn {_x, y} -> y end)
+
+    top = Enum.max(ys)
+    down = Enum.min(ys)
+    left = Enum.min(xs)
+    right = Enum.max(xs)
+
+    area = Enum.count(top..down) * Enum.count(right..left)
+
+    area - Enum.count(elves)
+  end
+end
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{elves, instructions} =
+  Enum.reduce(1..10, {elves, instructions}, fn _, {elves, instructions} ->
+    elves = Routing.plan(elves, instructions)
+    [first | rest] = instructions
+
+    {elves, rest ++ [first]}
+  end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Trace.area(elves)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+Stream.iterate(1, &(&1 + 1))
+|> Enum.reduce_while({elves, instructions}, fn round, {elves, instructions} ->
+  after_elves = Routing.plan(elves, instructions)
+
+  [first | rest] = instructions
+  instructions = rest ++ [first]
+
+  if after_elves != elves do
+    {:cont, {after_elves, instructions}}
+  else
+    {:halt, round}
+  end
+end)
+```
