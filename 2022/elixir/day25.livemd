@@ -1,0 +1,114 @@
+# Day 25
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Puzzle Input
+
+```elixir
+area = Kino.Input.textarea("Puzzle Input")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+puzzle_input = Kino.Input.read(area)
+```
+
+```elixir
+example_input = """
+1=-0-2
+12111
+2=0=
+21
+2=01
+111
+20012
+112
+1=-1=
+1-12
+12
+1=
+122
+"""
+```
+
+```elixir
+input = puzzle_input
+```
+
+## Common
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+nums = String.split(input, "\n", trim: true)
+```
+
+```elixir
+defmodule Formatter do
+  @base 5
+
+  def from_snafu(str) do
+    str
+    |> String.codepoints()
+    |> Stream.map(fn point ->
+      case point do
+        "0" -> 0
+        "1" -> 1
+        "2" -> 2
+        "-" -> -1
+        "=" -> -2
+      end
+    end)
+    |> Enum.reduce(0, fn num, acc -> acc * @base + num end)
+  end
+
+  def to_snafu(num) do
+    num |> do_to_snafu([]) |> Enum.join()
+  end
+
+  def do_to_snafu(num, acc) when num <= 2, do: [to_string(num) | acc]
+
+  def do_to_snafu(num, acc) do
+    current = rem(num, @base)
+
+    needs_cut_off? = current > 2
+    current = if needs_cut_off?, do: current - @base, else: current
+
+    digit =
+      case current do
+        0 -> "0"
+        1 -> "1"
+        2 -> "2"
+        -1 -> "-"
+        -2 -> "="
+      end
+
+    rest = div(num, @base) + if needs_cut_off?, do: 1, else: 0
+
+    do_to_snafu(rest, [digit | acc])
+  end
+end
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part One
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+nums |> Stream.map(&Formatter.from_snafu/1) |> Enum.sum() |> Formatter.to_snafu()
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## Part Two
+
+```elixir
+
+```
