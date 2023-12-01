@@ -1,0 +1,119 @@
+<!-- livebook:{"file_entries":[{"name":"input_01.txt","type":"attachment"}]} -->
+
+# Day 01
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.11.0"},
+  :nimble_parsec
+])
+```
+
+## Part 1
+
+```elixir
+test = """
+1abc2
+pqr3stu8vwx
+a1b2c3d4e5f
+treb7uchet
+"""
+```
+
+```elixir
+input =
+  Kino.FS.file_path("input_01.txt")
+  |> File.read!()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+input
+|> String.split("\n", trim: true)
+|> Enum.map(fn line ->
+  digits =
+    line
+    |> String.codepoints()
+    |> Enum.filter(&Regex.match?(~r/\d/, &1))
+
+  number = List.first(digits) <> List.last(digits)
+  {number, ""} = Integer.parse(number)
+  number
+end)
+|> Enum.sum()
+```
+
+## Part 2
+
+```elixir
+pattern = ~r/^(?:one|two|three|four|five|six|seven|eight|nine|[1-9])/
+```
+
+```elixir
+defmodule Matcher do
+  def all(pattern, string, matches \\ [])
+
+  def all(_pattern, "", matches) do
+    Enum.reverse(matches)
+  end
+
+  def all(pattern, string, matches) do
+    matches =
+      case Regex.run(pattern, string) do
+        nil ->
+          matches
+
+        [match] ->
+          [match | matches]
+      end
+
+    all(pattern, String.slice(string, 1..-1), matches)
+  end
+end
+```
+
+```elixir
+defmodule Parser do
+  def to_digit(number) do
+    case number do
+      "one" -> "1"
+      "two" -> "2"
+      "three" -> "3"
+      "four" -> "4"
+      "five" -> "5"
+      "six" -> "6"
+      "seven" -> "7"
+      "eight" -> "8"
+      "nine" -> "9"
+      number -> number
+    end
+  end
+end
+```
+
+```elixir
+test = """
+two1nine
+eightwothree
+abcone2threexyz
+xtwone3four
+4nineeightseven2
+zoneight234
+7pqrstsixteen
+"""
+```
+
+```elixir
+input
+|> String.split("\n", trim: true)
+|> Enum.map(fn line ->
+  matches = Matcher.all(pattern, line)
+  digits = Enum.map(matches, &Parser.to_digit/1)
+
+  number = List.first(digits) <> List.last(digits)
+  {number, ""} = Integer.parse(number)
+  number
+end)
+|> Enum.sum()
+```
