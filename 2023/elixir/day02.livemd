@@ -1,0 +1,95 @@
+<!-- livebook:{"file_entries":[{"name":"input02.txt","type":"attachment"}]} -->
+
+# Day 02
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.11.0"}
+])
+```
+
+## Part 1
+
+```elixir
+input =
+  Kino.FS.file_path("input02.txt")
+  |> File.read!()
+```
+
+```elixir
+test = """
+Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green
+Game 2: 1 blue, 2 green; 3 green, 4 blue, 1 red; 1 green, 1 blue
+Game 3: 8 green, 6 blue, 20 red; 5 blue, 4 red, 13 green; 5 green, 1 red
+Game 4: 1 green, 3 red, 6 blue; 3 green, 6 red; 3 green, 15 blue, 14 red
+Game 5: 6 red, 1 blue, 3 green; 2 blue, 1 red, 2 green
+"""
+```
+
+```elixir
+games =
+  input
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn line ->
+    ["Game " <> id, game_log] = String.split(line, ":", parts: 2)
+
+    rounds =
+      game_log
+      |> String.split(";")
+      |> Enum.map(fn rounds ->
+        rounds
+        |> String.split([","], trim: true)
+        |> Enum.map(fn " " <> set ->
+          {number, " " <> color} = Integer.parse(set)
+          {color, number}
+        end)
+      end)
+
+    {id, ""} = Integer.parse(id)
+    %{id: id, rounds: rounds}
+  end)
+```
+
+```elixir
+defmodule Game do
+  @total %{
+    "red" => 12,
+    "green" => 13,
+    "blue" => 14
+  }
+
+  def possible?(%{rounds: rounds}) do
+    Enum.all?(rounds, fn round ->
+      Enum.all?(round, fn {color, number} ->
+        @total[color] >= number
+      end)
+    end)
+  end
+end
+```
+
+```elixir
+games |> Enum.filter(&Game.possible?/1) |> Enum.map(& &1.id) |> Enum.sum()
+```
+
+## Part 2
+
+```elixir
+defmodule GameInventory do
+  def derive_inventory(%{rounds: rounds}) do
+    rounds
+    |> List.flatten()
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Enum.map(fn {_key, values} -> Enum.max(values) end)
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+games
+|> Enum.map(&GameInventory.derive_inventory/1)
+|> Enum.map(&Enum.product/1)
+|> Enum.sum()
+```
