@@ -1,0 +1,154 @@
+<!-- livebook:{"file_entries":[{"name":"input03.txt","type":"attachment"}]} -->
+
+# Day 03
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.11.0"}
+])
+```
+
+## Part 01
+
+```elixir
+input =
+  Kino.FS.file_path("input03.txt")
+  |> File.read!()
+```
+
+```elixir
+test = """
+467..114..
+...*......
+..35..633.
+......#...
+617*......
+.....+.58.
+..592.....
+......755.
+...$.*....
+.664.598..
+"""
+```
+
+```elixir
+schema =
+  input
+  |> String.split("\n", trim: true)
+  |> Enum.with_index(fn line, y ->
+    line |> String.codepoints() |> Enum.with_index(fn value, x -> {{y, x}, value} end)
+  end)
+  |> List.flatten()
+  |> Map.new()
+```
+
+```elixir
+defmodule Schema do
+  @numbers 0..9 |> Enum.map(&Integer.to_string/1) |> MapSet.new()
+
+  def number?(n) do
+    MapSet.member?(@numbers, n)
+  end
+
+  def numbers(schema) do
+    keys = schema |> Map.keys() |> Enum.sort()
+
+    numbers(schema, keys, [])
+  end
+
+  def numbers(_schema, [], numbers) do
+    numbers
+  end
+
+  def numbers(schema, [{line, _} = key | rest] = keys, numbers) do
+    if number?(schema[key]) do
+      {number, rest} =
+        Enum.split_while(keys, fn {y, _} = key ->
+          y == line && number?(schema[key])
+        end)
+
+      numbers(schema, rest, [number | numbers])
+    else
+      numbers(schema, rest, numbers)
+    end
+  end
+
+  def box(number) do
+    area =
+      number
+      |> Enum.map(fn {y, x} ->
+        [
+          {y + 1, x},
+          {y - 1, x},
+          {y, x - 1},
+          {y, x + 1},
+          {y + 1, x + 1},
+          {y + 1, x - 1},
+          {y - 1, x + 1},
+          {y - 1, x - 1}
+        ]
+      end)
+      |> List.flatten()
+      |> MapSet.new()
+
+    area |> MapSet.difference(MapSet.new(number))
+  end
+
+  def to_integer(schema, number) do
+    number |> Enum.map(&Map.fetch!(schema, &1)) |> Enum.join() |> Integer.parse() |> elem(0)
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+numbers =
+  schema
+  |> Schema.numbers()
+  |> Enum.filter(fn number ->
+    number
+    |> Schema.box()
+    |> Enum.any?(fn i -> Map.get(schema, i, ".") != "." end)
+  end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+numbers
+|> Enum.map(&Schema.to_integer(schema, &1))
+|> Enum.sum()
+```
+
+## Part 2
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+gear_numbers =
+  schema
+  |> Schema.numbers()
+  |> Enum.group_by(fn number ->
+    number
+    |> Schema.box()
+    |> Enum.find(fn i -> Map.get(schema, i, ".") == "*" end)
+  end)
+  |> Map.values()
+  |> Enum.filter(fn
+    [_, _] -> true
+    _value -> false
+  end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+gear_numbers
+|> Enum.map(fn numbers ->
+  numbers
+  |> Enum.map(&Schema.to_integer(schema, &1))
+  |> Enum.product()
+end)
+|> Enum.sum()
+```
