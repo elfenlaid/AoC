@@ -1,0 +1,100 @@
+<!-- livebook:{"file_entries":[{"name":"input04.txt","type":"attachment"}]} -->
+
+# Day 04
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.11.0"}
+])
+```
+
+## Part 1
+
+```elixir
+input =
+  Kino.FS.file_path("input04.txt")
+  |> File.read!()
+```
+
+```elixir
+test = """
+Card 1: 41 48 83 86 17 | 83 86  6 31 17  9 48 53
+Card 2: 13 32 20 16 61 | 61 30 68 82 17 32 24 19
+Card 3:  1 21 53 59 44 | 69 82 63 72 16 21 14  1
+Card 4: 41 92 73 84 69 | 59 84 76 51 58  5 54 83
+Card 5: 87 83 26 28 32 | 88 30 70 12 93 22 82 36
+Card 6: 31 18 13 56 72 | 74 77 10 23 35 67 36 11
+"""
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+cards =
+  input
+  |> String.split("\n", trim: true)
+  |> Enum.map(fn line ->
+    ["Card" <> card, numbers] = String.split(line, ":", parts: 2)
+
+    {card, ""} = card |> String.trim() |> Integer.parse()
+
+    [winning_numbers, my_numbers] =
+      numbers
+      |> String.split("|")
+      |> Enum.map(fn nums ->
+        nums
+        |> String.split(" ", trim: true)
+        |> Enum.map(fn num ->
+          {num, ""} = Integer.parse(num)
+          num
+        end)
+      end)
+
+    {card, [winning_numbers, my_numbers]}
+  end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+matches =
+  cards
+  |> Enum.map(fn {card, [winning, my]} ->
+    {card, MapSet.intersection(MapSet.new(winning), MapSet.new(my)) |> Enum.count()}
+  end)
+  |> Map.new()
+```
+
+```elixir
+matches
+|> Map.values()
+|> Enum.map(fn
+  0 -> 0
+  p -> 2 ** (p - 1)
+end)
+|> Enum.sum()
+```
+
+## Part 2
+
+```elixir
+defmodule Lottery do
+  def calculate_prize(matches) do
+    calculate_prize(matches, 0, matches |> Map.keys() |> Enum.sort())
+  end
+
+  def calculate_prize(_matches, total, []) do
+    total
+  end
+
+  def calculate_prize(matches, total, [current | rest]) do
+    [_ | prize] = Enum.to_list(current..(current + matches[current]))
+
+    calculate_prize(matches, total + 1, prize ++ rest)
+  end
+end
+```
+
+```elixir
+Lottery.calculate_prize(matches)
+```
