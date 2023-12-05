@@ -1,0 +1,166 @@
+<!-- livebook:{"file_entries":[{"name":"input05.txt","type":"attachment"}]} -->
+
+# Day 05
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.11.0"}
+])
+```
+
+## Part 1
+
+```elixir
+content =
+  Kino.FS.file_path("input05.txt")
+  |> File.read!()
+```
+
+```elixir
+test = """
+seeds: 79 14 55 13
+
+seed-to-soil map:
+50 98 2
+52 50 48
+
+soil-to-fertilizer map:
+0 15 37
+37 52 2
+39 0 15
+
+fertilizer-to-water map:
+49 53 8
+0 11 42
+42 0 7
+57 7 4
+
+water-to-light map:
+88 18 7
+18 25 70
+
+light-to-temperature map:
+45 77 23
+81 45 19
+68 64 13
+
+temperature-to-humidity map:
+0 69 1
+1 0 69
+
+humidity-to-location map:
+60 56 37
+56 93 4
+"""
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+[seeds | maps] = String.split(content, "\n\n", trim: true)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+"seeds: " <> ids = seeds
+ids = ids |> String.split(" ", trim: true) |> Enum.map(&(&1 |> Integer.parse() |> elem(0)))
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ranges =
+  maps
+  |> Enum.map(fn map ->
+    map
+    |> String.split()
+    |> Enum.drop(2)
+    |> Enum.map(&(&1 |> Integer.parse() |> elem(0)))
+    |> Enum.chunk_every(3)
+    |> Enum.map(fn [destination, source, range] ->
+      {source..(source + range - 1), destination - source}
+    end)
+  end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+ids
+|> Enum.map(fn id ->
+  Enum.reduce(ranges, id, fn rs, id ->
+    range = Enum.find(rs, fn {range, _diff} -> Enum.member?(range, id) end)
+
+    case range do
+      nil -> id
+      {_range, diff} -> id + diff
+    end
+  end)
+end)
+|> Enum.min()
+```
+
+## Part 2
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+seed_ranges =
+  ids
+  |> Enum.chunk_every(2)
+  |> Enum.map(fn [from, lenght] ->
+    from..(from + lenght - 1)
+  end)
+```
+
+```elixir
+defmodule Almanac do
+  def convert(seeds, map) do
+    seeds
+    |> split(endpoints(map), [])
+    |> List.flatten()
+    |> Enum.map(&translate(&1, map))
+  end
+
+  def translate(seeds, map) do
+    range = Enum.find(map, fn {range, _diff} -> Enum.member?(range, seeds.first) end)
+
+    case range do
+      nil -> seeds
+      {_range, diff} -> Range.shift(seeds, diff)
+    end
+  end
+
+  def split(range, [], result) do
+    Enum.reverse([range | result])
+  end
+
+  def split(range, [splitter | splitters], result) do
+    if splitter > range.first && splitter < range.last do
+      {left, right} = Range.split(range, splitter - range.first)
+      split(right, splitters, [left | result])
+    else
+      split(range, splitters, result)
+    end
+  end
+
+  def endpoints(map) do
+    map |> Enum.flat_map(fn {range, _diff} -> [range.first, range.last] end) |> Enum.sort()
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+seed_ranges
+|> Enum.flat_map(fn seed_range ->
+  ranges
+  |> Enum.reduce([seed_range], fn map, seeds ->
+    Enum.flat_map(seeds, &Almanac.convert(&1, map))
+  end)
+end)
+|> Enum.min_by(& &1.first)
+|> then(& &1.first)
+```
