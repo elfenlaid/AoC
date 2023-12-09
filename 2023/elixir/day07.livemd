@@ -1,0 +1,147 @@
+<!-- livebook:{"file_entries":[{"name":"input07.txt","type":"attachment"}]} -->
+
+# Day 07
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.11.0"}
+])
+```
+
+## Part 1
+
+```elixir
+content =
+  Kino.FS.file_path("input07.txt")
+  |> File.read!()
+```
+
+```elixir
+test = """
+32T3K 765
+T55J5 684
+KK677 28
+KTJJT 220
+QQQJA 483
+"""
+```
+
+```elixir
+input = content
+```
+
+```elixir
+defmodule CamelCards do
+  def hand_strength(hand) do
+    hand
+    |> Enum.group_by(& &1)
+    |> Map.values()
+    |> Enum.map(&length/1)
+    |> Enum.sort(:desc)
+    |> case do
+      [5] -> 1
+      [4, 1] -> 2
+      [3, 2] -> 3
+      [3, 1, 1] -> 4
+      [2, 2, 1] -> 5
+      [2, 1, 1, 1] -> 6
+      [1, 1, 1, 1, 1] -> 7
+    end
+  end
+
+  @cards ~w(A K Q J T 9 8 7 6 5 4 3 2) |> Enum.with_index(1) |> Map.new()
+
+  def card_strength(card) do
+    Map.fetch!(@cards, card)
+  end
+end
+```
+
+```elixir
+?1
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+list_of_hands =
+  input
+  |> String.split()
+  |> Enum.chunk_every(2)
+  |> Enum.map(fn [hand, bid] ->
+    bid = bid |> Integer.parse() |> elem(0)
+    hand = String.codepoints(hand)
+    {hand, bid}
+  end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+list_of_hands
+|> Enum.sort_by(
+  fn {hand, _bid} ->
+    {CamelCards.hand_strength(hand), Enum.map(hand, &CamelCards.card_strength/1)}
+  end,
+  :desc
+)
+|> Stream.with_index(1)
+|> Stream.map(fn {{_hand, bid}, rank} -> bid * rank end)
+|> Enum.sum()
+```
+
+## Part 2
+
+```elixir
+defmodule JokerCamelCards do
+  def hand_strength(hand) do
+    combinations =
+      hand
+      |> Enum.group_by(& &1)
+      |> Enum.map(fn {card, duplicates} ->
+        {card, length(duplicates)}
+      end)
+      |> Map.new()
+
+    {jokers, rest} = Map.pop(combinations, "J", 0)
+
+    rest
+    |> Map.values()
+    |> Enum.sort(:desc)
+    |> case do
+      [] -> [jokers]
+      [top | rest] -> [top + jokers | rest]
+    end
+    |> case do
+      [5] -> 1
+      [4, 1] -> 2
+      [3, 2] -> 3
+      [3, 1, 1] -> 4
+      [2, 2, 1] -> 5
+      [2, 1, 1, 1] -> 6
+      [1, 1, 1, 1, 1] -> 7
+    end
+  end
+
+  @cards ~w(A K Q T 9 8 7 6 5 4 3 2 J) |> Enum.with_index(1) |> Map.new()
+
+  def card_strength(card) do
+    Map.fetch!(@cards, card)
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+list_of_hands
+|> Enum.sort_by(
+  fn {hand, _bid} ->
+    {JokerCamelCards.hand_strength(hand), Enum.map(hand, &JokerCamelCards.card_strength/1)}
+  end,
+  :desc
+)
+|> Stream.with_index(1)
+|> Stream.map(fn {{_hand, bid}, rank} -> bid * rank end)
+|> Enum.sum()
+```
