@@ -1,0 +1,147 @@
+<!-- livebook:{"file_entries":[{"name":"input08.txt","type":"attachment"}]} -->
+
+# Day 08
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.11.0"}
+])
+```
+
+## Part 1
+
+```elixir
+content =
+  Kino.FS.file_path("input08.txt")
+  |> File.read!()
+```
+
+```elixir
+test = """
+LR
+
+11A = (11B, XXX)
+11B = (XXX, 11Z)
+11Z = (11B, XXX)
+22A = (22B, XXX)
+22B = (22C, 22C)
+22C = (22Z, 22Z)
+22Z = (22B, 22B)
+XXX = (XXX, XXX)
+"""
+```
+
+```elixir
+input = content
+```
+
+```elixir
+[instructions | graph] = String.split(input, "\n", trim: true)
+```
+
+```elixir
+instructions = instructions |> String.codepoints()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+network =
+  graph
+  |> Enum.map(fn line ->
+    [node, left, right] = String.split(line, [" ", ",", "=", "(", ")"], trim: true)
+    {node, {left, right}}
+  end)
+  |> Map.new()
+```
+
+```elixir
+defmodule Route do
+  def steps(network, instructions) do
+    sequence = instructions |> Enum.with_index(&{&2, &1}) |> Map.new()
+    steps(network, "AAA", 0, {sequence, 0})
+  end
+
+  def steps(_network, "ZZZ", total, _sequence) do
+    total
+  end
+
+  def steps(network, node, total, sequence) do
+    {l, r} = Map.fetch!(network, node)
+    {step, sequence} = next_step(sequence)
+
+    next =
+      case step do
+        "L" -> l
+        "R" -> r
+      end
+
+    steps(network, next, total + 1, sequence)
+  end
+
+  def next_step({instructions, current}) do
+    step = Map.fetch!(instructions, current)
+    next = current + 1
+    next = if next >= map_size(instructions), do: 0, else: next
+
+    {step, {instructions, next}}
+  end
+end
+```
+
+```elixir
+Route.steps(network, instructions)
+```
+
+## Part 2
+
+```elixir
+defmodule MultiRoute do
+  def steps(network, instructions) do
+    network =
+      for {n, {l, r}} <- network, into: %{} do
+        {String.reverse(n), {String.reverse(l), String.reverse(r)}}
+      end
+
+    nodes = network |> Map.keys() |> Enum.filter(&match?("A" <> _rest, &1))
+    sequence = instructions |> Enum.with_index(&{&2, &1}) |> Map.new()
+
+    nodes
+    |> Enum.map(fn node ->
+      steps(network, node, 0, {sequence, 0})
+    end)
+  end
+
+  def steps(_network, "Z" <> _, total, _sequence) do
+    total
+  end
+
+  def steps(network, node, total, sequence) do
+    {l, r} = Map.fetch!(network, node)
+    {step, sequence} = next_step(sequence)
+
+    next =
+      case step do
+        "L" -> l
+        "R" -> r
+      end
+
+    steps(network, next, total + 1, sequence)
+  end
+
+  def next_step({instructions, current}) do
+    step = Map.fetch!(instructions, current)
+    next = current + 1
+    next = if next >= map_size(instructions), do: 0, else: next
+
+    {step, {instructions, next}}
+  end
+end
+```
+
+```elixir
+MultiRoute.steps(network, instructions)
+|> Enum.reduce(fn acc, next ->
+  trunc(acc * next / Integer.gcd(acc, next))
+end)
+```
