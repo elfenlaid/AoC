@@ -18,9 +18,9 @@ let dampened_safe_report = {|report|
     }
 
     [
-        {do $safe_report $report}
-        {$indexed_pairs | filter { not ($in.item | do $safe_inc) } | any $check_pair }
-        {$indexed_pairs | filter { not ($in.item | do $safe_dec) } | any $check_pair }
+        {do $safe_report $report},
+        {do $check_pair ($indexed_pairs | skip while {$in.item | do $safe_inc} | first) },
+        {do $check_pair ($indexed_pairs | skip while {$in.item | do $safe_dec} | first) }
     ] | any {do $in }
 }
 
