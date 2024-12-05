@@ -1,0 +1,68 @@
+<!-- livebook:{"file_entries":[{"name":"input_05.txt","type":"attachment"}]} -->
+
+# Day 05
+
+```elixir
+Mix.install([:kino])
+```
+
+## Section
+
+```elixir
+content =
+  Kino.FS.file_path("input_05.txt")
+  |> File.read!()
+```
+
+```elixir
+[rules, manuals] = content |> String.split("\n\n")
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+rules =
+  rules
+  |> String.split(["\n", "|"])
+  |> Enum.map(&String.to_integer/1)
+  |> Enum.chunk_every(2)
+  |> Enum.group_by(&List.first/1, &List.last/1)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+manuals =
+  manuals
+  |> String.split()
+  |> Enum.map(fn row -> row |> String.split(",") |> Enum.map(&String.to_integer/1) end)
+```
+
+```elixir
+defmodule Manual do
+  def sort(rules, manual) do
+    Enum.sort(manual, fn lhs, rhs ->
+      rhs in Map.get(rules, lhs, [])
+    end)
+  end
+end
+```
+
+### Part 1
+
+```elixir
+manuals
+|> Enum.filter(& &1 == Manual.sort(rules, &1))
+|> Enum.map(fn list -> Enum.at(list, list |> length |> div(2)) end)
+|> Enum.sum()
+```
+
+### Part 2
+
+```elixir
+manuals
+|> Enum.reject(& &1 == Manual.sort(rules, &1))
+|> Enum.map(&Manual.sort(rules, &1))
+|> Enum.map(fn list -> Enum.at(list, list |> length |> div(2)) end)
+|> Enum.sum()
+```
