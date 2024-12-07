@@ -1,0 +1,115 @@
+<!-- livebook:{"file_entries":[{"name":"input_04.txt","type":"attachment"}]} -->
+
+# Day 4
+
+```elixir
+Mix.install([:kino])
+```
+
+## Section
+
+```elixir
+content =
+  Kino.FS.file_path("input_04.txt")
+  |> File.read!()
+```
+
+```elixir
+defmodule Grid do
+  alias __MODULE__
+
+  defstruct [:binary, :side]
+
+  def new(str) do
+    binary = str |> String.split() |> IO.iodata_to_binary()
+
+    %Grid{
+      binary: binary,
+      side: binary |> byte_size() |> :math.sqrt() |> floor()
+    }
+  end
+
+  def matches(%Grid{} = grid, pattern) do
+    for {i, _} <- :binary.matches(grid.binary, pattern) do
+      to_row_column(grid, i)
+    end
+  end
+
+  def to_row_column(%Grid{} = grid, i) do
+    {div(i, grid.side), rem(i, grid.side)}
+  end
+
+  def select(%Grid{} = grid, {row, col}, default \\ nil) do
+    cond do
+      row < 0 or col < 0 ->
+        default
+
+      row >= grid.side or col >= grid.side ->
+        default
+
+      :else ->
+        :binary.at(grid.binary, row * grid.side + col)
+    end
+  end
+end
+```
+
+```elixir
+grid = Grid.new(content)
+```
+
+### Part 1
+
+```elixir
+x_matches = Grid.matches(grid, "X")
+```
+
+```elixir
+octo_directions = for r <- -1..1, c <- -1..1, {r, c} != {0, 0}, do: {r, c}
+```
+
+```elixir
+direction_ray = fn {r, c}, {dr, dc} ->
+  Stream.iterate({r, c}, fn {r, c} -> {r + dr, c + dc} end) |> Enum.take(4)
+end
+```
+
+```elixir
+xmas_strings =
+  for match <- x_matches, direction <- octo_directions do
+    for rc <- direction_ray.(match, direction) do
+      Grid.select(grid, rc, 0)
+    end
+  end
+```
+
+```elixir
+xmas_strings |> Enum.filter(& &1 == ~c"XMAS") |> length()
+```
+
+### Part 2
+
+```elixir
+a_matches = Grid.matches(grid, "A")
+```
+
+```elixir
+x_selector = [{-1, -1}, {-1, 1}, {0, 0}, {1, -1}, {1, 1}]
+```
+
+```elixir
+mas_strings =
+  for {r, c} <- a_matches do
+    for {dr, dc} <- x_selector do
+      Grid.select(grid, {r + dr, c + dc}, 0)
+    end
+  end
+```
+
+```elixir
+mas_patterns = [~c"MSAMS", ~c"SSAMM", ~c"MMASS",  ~c"SMASM"]
+```
+
+```elixir
+mas_strings |> Enum.filter(& &1 in mas_patterns) |> length()
+```
