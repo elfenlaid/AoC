@@ -1,0 +1,233 @@
+<!-- livebook:{"file_entries":[{"name":"input_06.txt","type":"attachment"}]} -->
+
+# Day 6
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.0"}
+])
+```
+
+## Section
+
+```elixir
+content =
+  Kino.FS.file_path("input_06.txt")
+  |> File.read!()
+```
+
+```elixir
+input = """
+....#.....
+.........#
+..........
+..#.......
+.......#..
+..........
+.#..^.....
+........#.
+#.........
+......#...
+"""
+```
+
+```elixir
+bitstring = input |> String.split() |> IO.iodata_to_binary()
+```
+
+```elixir
+side = bitstring |> byte_size() |> :math.sqrt() |> floor()
+```
+
+```elixir
+to_rc = fn i -> {div(i, side), rem(i, side)} end
+```
+
+```elixir
+nodes = for {i, _} <- :binary.matches(bitstring, "#"), do: to_rc.(i)
+```
+
+```elixir
+guard = {:up, bitstring |> :binary.match("^") |> elem(0) |> then(to_rc)}
+```
+
+```elixir
+defmodule Field do
+  alias __MODULE__
+  
+  defstruct [:columns, :rows]
+  
+  def new(nodes) do
+    %Field{
+      columns: Enum.group_by(nodes, &elem(&1, 1), &elem(&1, 0)), 
+      rows: Enum.group_by(nodes, &elem(&1, 0), &elem(&1, 1))
+    }
+  end
+
+  def raycast(%Field{} = field, dir, {r, c}) do
+    %Field{columns: columns, rows: rows} = field
+    
+    case dir do
+      :up ->
+        row =
+          columns
+          |> Map.get(c, [])
+          |> Enum.reverse()
+          |> Enum.drop_while(&(&1 > r))
+          |> List.first()
+
+        if row, do: {row, c}
+
+      :down ->
+        row = columns |> Map.get(c, []) |> Enum.drop_while(&(&1 < r)) |> List.first()
+        if row, do: {row, c}
+
+      :left ->
+        column =
+          rows |> Map.get(r, []) |> Enum.reverse() |> Enum.drop_while(&(&1 > c)) |> List.first()
+
+        if column, do: {r, column}
+
+      :right ->
+        column = rows |> Map.get(r, []) |> Enum.drop_while(&(&1 < c)) |> List.first()
+        if column, do: {r, column}
+    end
+  end
+end
+```
+
+```elixir
+field = Field.new(nodes)
+```
+
+```elixir
+turn = fn dir ->
+  case dir do
+    :up -> :right
+    :right -> :down
+    :down -> :left
+    :left -> :up
+  end
+end
+```
+
+```elixir
+approach = fn from_dir, {r, c} ->
+  case from_dir do
+    :up -> {r + 1, c}
+    :down -> {r - 1, c}
+    :left -> {r, c + 1}
+    :right -> {r, c - 1}
+  end
+end
+```
+
+```elixir
+guard_path =
+  guard
+  |> Stream.iterate(fn {dir, point} ->
+    case Field.raycast(field, dir, point) do
+      nil ->
+        nil
+
+      point ->
+        {turn.(dir), approach.(dir, point)}
+    end
+  end)
+  |> Enum.take_while(&(&1 != nil))
+```
+
+```elixir
+exit_point =
+  guard_path
+  |> Enum.reverse()
+  |> hd()
+  |> then(fn {dir, {r, c}} ->
+    case dir do
+      :down -> {side - 1, c}
+      :up -> {0, c}
+      :left -> {r, 0}
+      :right -> {r, side - 1}
+    end
+  end)
+```
+
+```elixir
+guard_points = guard_path |> Keyword.values()
+```
+
+```elixir
+segments = Enum.zip(guard_points, tl(guard_points) ++ [exit_point])
+```
+
+```elixir
+segment_points = fn {{from_r, from_c}, {to_r, to_c}} ->
+  if from_r == to_r do
+    for c <- from_c..to_c, do: {to_r, c}
+  else
+    for r <- from_r..to_r, do: {r, to_c}
+  end
+end
+```
+
+```elixir
+segments
+|> Enum.flat_map(segment_points)
+|> Enum.uniq()
+|> length()
+```
+
+### Part 2
+
+```elixir
+directed_segments = Enum.zip(guard_path, (guard_path |> Keyword.values() |> tl()) ++ [exit_point])
+```
+
+```elixir
+obstacle_points =
+  directed_segments
+  |> Enum.flat_map(fn {{dir, from_point}, to_point} ->
+    clear_points =
+      segment_points.({from_point, to_point})
+      |> tl()
+      |> List.delete(-1)
+
+    possible_dir = turn.(dir)
+
+    clear_points
+    |> Enum.filter(&(Field.raycast(field, possible_dir, &1) != nil))
+  end)
+  |> Enum.uniq()
+  |> Enum.reject( & &1 == elem(guard, 1))
+```
+
+```elixir
+for obstacle <- obstacle_points do
+  field = [obstacle | nodes] |> Enum.sort() |> Field.new()
+
+  guard
+  |> Stream.unfold(fn
+    nil ->
+      nil
+
+    {dir, point} = guard ->
+      new_guard =
+        case Field.raycast(field, dir, point) do
+          nil ->
+            nil
+
+          point ->
+            {turn.(dir), approach.(dir, point)}
+        end
+
+      {guard, new_guard}
+  end)
+  |> Enum.reduce_while([], fn guard, guards ->
+    if guard in guards do
+      {:halt, guard}
+    else
+      {:cont, [guard | guards]}
+    end
+  end)
+end
+```
